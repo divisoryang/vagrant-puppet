@@ -1,0 +1,10 @@
+name        'elithrar-golang'
+version     '0.0.3'
+source      'git://github.com/elithrar/puppet-golang-backports.git'
+author      'Matt Silverlock'
+summary     'Module for installing go from unofficial backports PPA'
+description 'Install the latest version of Go on older versions of Ubuntu'
+license     'BSD New License'
+
+dependency  'puppetlabs/apt', '>= 1.1.0'
+dependency  'puppetlabs/stdlib', '>=3.2.0'

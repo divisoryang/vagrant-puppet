@@ -1,0 +1,33 @@
+{
+  "name": "elithrar-golang",
+  "version": "0.0.3",
+  "source": "git://github.com/elithrar/puppet-golang-backports.git",
+  "author": "Matt Silverlock",
+  "license": "BSD New License",
+  "summary": "Module for installing go from unofficial backports PPA",
+  "description": "Install the latest version of Go on older versions of Ubuntu",
+  "project_page": "UNKNOWN",
+  "dependencies": [
+    {
+      "name": "puppetlabs/apt",
+      "version_requirement": ">= 1.1.0"
+    },
+    {
+      "name": "puppetlabs/stdlib",
+      "version_requirement": ">=3.2.0"
+    }
+  ],
+  "types": [
+
+  ],
+  "checksums": {
+    "LICENSE": "855828b1aa86dfece0fb6c3026d1bf1e",
+    "Modulefile": "eaf3f5ac7e0203793d37465a95926860",
+    "README.md": "76b5b42404b14cd8b5a518729ab945fa",
+    "Rakefile": "c6a91ef43608c5d4b22bc7e50a94d6a5",
+    "manifests/init.pp": "ce3a6151c91173731306a4420f98ffc9",
+    "spec/classes/golang_spec.rb": "ee8f3f8e64e623a5053b414987923eef",
+    "spec/spec_helper.rb": "0db89c9a486df193c0e40095422e19dc",
+    "tests/base.pp": "77f0e36d05f3c3e5e8c0141755073d72"
+  }
+}
