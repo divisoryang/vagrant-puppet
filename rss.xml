@@ -1,0 +1,1816 @@
+<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0"><channel><title><![CDATA[Blog Name]]></title><description><![CDATA[Lorem ipsum dolor sit amet, ius sonet omnesque facilisis an, etiam mediocrem ad ius. Ius ei graece altera, at suavitate adolescens per.]]></description><link>http://acyort.github.io</link><generator>RSS for Node</generator><lastBuildDate>Thu, 04 Feb 2016 07:17:11 GMT</lastBuildDate><atom:link href="http://acyort.github.io/rss.xml" rel="self" type="application/rss+xml"/><pubDate>Thu, 04 Feb 2016 07:17:09 GMT</pubDate><item><title><![CDATA[天猫双11前端分享系列（七）：如何精确识别终端]]></title><link>http://acyort.github.io/posts/2016/01/127363187.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2016/01/127363187.html</guid><dc:creator><![CDATA[maisui99]]></dc:creator><pubDate>Mon, 18 Jan 2016 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;首先，要先说声抱歉，因为，其实目前我们还没有做到精确地做到识别99%的终端设别，其中原因，一部分是因为终端类型和UA实在难以覆盖，另外一部分原因也是因为使用了一些错误的识别策略。&lt;/p&gt;
+&lt;p&gt;注1：后面会大量出现detector，其实就是我们给内部终端识别工具起的一个名字。
+注2：天猫页面一直在实施一个url对应多份不同终端的页面，所以终端识别非常重要。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;在哪一层进行识别&lt;/h2&gt;
+&lt;h3 id=&quot;-&quot;&gt;初期方案&lt;/h3&gt;
+&lt;p&gt;由于当时处于业务mobile页面发展的初期，且大部分页面还在基于php进行开发，所以诞生了detector的第一个版本，php版本。识别逻辑也比较简单，纯正则匹配UA。&lt;/p&gt;
+&lt;p&gt;后来，node业务渐渐的增加，我们又重写了一份node版本，其中为了保持终端识别能力的一致，用于匹配UA的正则统一放到了一份json文件里，php和node都统一来读这一份文件。&lt;/p&gt;
+&lt;p&gt;正则主要还是收集了github上各种比较成熟的识别方案综合出来的。&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;改造期&lt;/h3&gt;
+&lt;p&gt;在2014年底，为了保证pad用户的访问质量，我们对终端识别的工具进行了非常大的改造。其中，一直在坚持的一点就是将识别能力放到服务端进行。&lt;/p&gt;
+&lt;p&gt;当时面临的一个难题是，安卓pad和安卓phone之间的UA并没有差异，特别是4.2之前的版本，无法通过UA进行识别，但是又希望能够让用户在安卓pad上看到更合适的PC版本，我们设计并产出了MED的终端硬件信息获取方案。&lt;/p&gt;
+&lt;h4 id=&quot;med&quot;&gt;MED&lt;/h4&gt;
+&lt;p&gt;MED的运行逻辑其实很简单：用户第一次访问的时候，在nginx端插入一个脚本，计算设备宽高、像素宽高、是否支持触摸等信息，然后记录到cookie中，第二次访问的时候，nginx就可以拿到用户的终端信息了。&lt;/p&gt;
+&lt;p&gt;于是，我们就可以知道用户的物理宽度了。可惜这里埋了一些坑。&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;物理宽度的计算用到screen.width/screen.height，但是不同厂商的安卓设备，在不同的浏览器或者webview下给了各种不同的值，而并不是屏幕的分辨率。&lt;/li&gt;
+&lt;li&gt;安卓手机的屏幕越做越大，和PAD之间的分界线越来越模糊。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h4 id=&quot;nginx-detector&quot;&gt;nginx-detector&lt;/h4&gt;
+&lt;p&gt;由于nginx端包含了拿到终端硬件信息的能力，那么这里就有两个选择&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;将拿到的信息写到http头里，转发给应用的php/node detector&lt;/li&gt;
+&lt;li&gt;直接在nginx层进行识别，将识别结果转发给下游的应用&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;其实，这里并没有太多的纠结，服务端语言太多，针对各种不同的语言维护一份实在不太现实。于是，我们选择在nginx层做这些事情，这里用到了开源的tengine模块&lt;a href=&quot;http://tengine.taobao.org/document/http_user_agent.html&quot;&gt;http_user_agent&lt;/a&gt;。&lt;/p&gt;
+&lt;p&gt;具体的识别规则也是从正则切换到了nginx配置文件。整个流程就优化为&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;nginx对UA进行解析&lt;/li&gt;
+&lt;li&gt;解析完成后，nginx再结合硬件信息，如果物理设备宽度较大，则识别为pad&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;这个方案逐渐部署到了各个应用上，支持了包括频道、活动、搜索等应用的终端识别，也顺利经过了双11的考验。&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;惊喜&lt;/h3&gt;
+&lt;p&gt;nginx层做解析带来一个惊喜，就是原本只有一个url一份缓存的方案，由于天猫一个url对应的是多个端不同的内容，无法进行缓存。&lt;/p&gt;
+&lt;p&gt;在nginx层面能够识别用户终端后，我们可以让一个url针对多份缓存副本，从而实现在cdn上可以直接经过nginx转发请求到用户终端对应的副本。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;策略变更&lt;/h2&gt;
+&lt;p&gt;双11结束之后，我这边对已有方案进行了梳理，nginx方案已经暴露了一些问题，更新nginx配置文件成本相对发布前端文件或者后端文件都略高，且很多安卓phone都反馈了访问时看到了pc版本的页面。&lt;/p&gt;
+&lt;p&gt;前者的问题在于维护成本，后者的原因是来自前面提到的浏览器提供数值问题。&lt;/p&gt;
+&lt;p&gt;目前识别策略还是遵守安卓UA规范，包含android + mobile则判断是Phone，android不带phone就是pad，也算是面对未来的解决方案了。&lt;/p&gt;
+&lt;p&gt;最后，如果有更好的识别方案或者建议，欢迎找我沟通。&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[天猫双11前端分享系列（六）：大规模 Node.js 应用（续）]]></title><link>http://acyort.github.io/posts/2015/12/120967352.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/12/120967352.html</guid><dc:creator><![CDATA[dead-horse]]></dc:creator><pubDate>Thu, 14 Jan 2016 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;&lt;a href=&quot;https://github.com/tmallfe/tmallfe.github.io/issues/28&quot;&gt;前一篇文章&lt;/a&gt;讲述了我们是怎样应用 Node.js 解决模板渲染的实际问题的，而这一篇我们来看看天猫是如何一步步将 node 推广到各个业务线上的。&lt;/p&gt;
+&lt;hr&gt;
+&lt;p&gt;前面讲述了我们通过 node 在今年双十一中承担了大量的页面渲染工作，包括：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;天猫首页、大部分天猫频道页、双十一会场以及所有天猫的活动页面都全部基于 node 应用提供服务。&lt;/li&gt;
+&lt;li&gt;商品详情、店铺和搜索页等主流程链路上，以及天猫超市和天猫会员等业务线上的页面渲染。&lt;/li&gt;
+&lt;li&gt;提供给内部运营小二的天猫页面搭建平台 web 层基于 node 进行开发，双十一期间在此平台上搭建了超过 1000+ 个双十一相关活动页面。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;单单看上面列出来的内容可能无法很直观的感受到到底 node 在天猫覆盖了多少业务。大家拿出手机，用浏览器打开天猫首页：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://os.alipayobjects.com/rmsportal/PXWLjltQzUEYogT.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;&lt;em&gt;从天猫无线首页上点进的任何一个天猫的链接，包括搜索后的列表页、每一个店铺或者商品详情页，都经由 node 渲染产生。&lt;/em&gt;&lt;/strong&gt; &lt;/p&gt;
+&lt;p&gt;罗马不是一天建成的，天猫将 node 覆盖到如此广的业务范围也是通过一年多的时间慢慢的渗透改造完成。这篇文章想和大家分享一下天猫是如何一步步将页面渲染部分通过 node 替换掉 php 和 java 的。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;契机&lt;/h2&gt;
+&lt;p&gt;在一年半之前，天猫的所有的活动页面、首页和频道页都是基于 TMS 搭建，由 php 在一个独特的 CDN 集群上进行渲染，然而由于之前 php 系统已经没有人维护了，且各种业务共享同一个环境导致 php 版本一直停留在很老的版本无法升级，性能和安全性上有各种问题。&lt;/p&gt;
+&lt;p&gt;此时亟需一个新的系统来取代旧的 php 体系，而 node 当时已经在业界和公司内慢慢的被应用起来了，特别是在阿里内部，已经有较为成熟的开发环境（包括私有 npm 服务、与内部其他系统的打通、与发布和监控体系的打通），而在做模板渲染层而言，node 可以很容易的做到前后端共享模板语言，加上性能也不差，前端又比较熟悉，所以最终我们选择了基于 node 进行改造。&lt;/p&gt;
+&lt;p&gt;于是我们基于 node 快速的开发了第一个版本的 wormhole（node 渲染容器），并将天猫的首页迁移到了这套系统上。迁移完成之后，我们对新（node）老（php）首页做了一个性能对比：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://os.alipayobjects.com/rmsportal/WaOeOXWNqKwCvMy.png&quot; alt=&quot;&quot;&gt;
+&lt;img src=&quot;https://os.alipayobjects.com/rmsportal/VsQOpWJdLFRfUtJ.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;尽管这个结果有一部分因素是因为老系统功能上比新系统要复杂，但是也在很大一定程度上说明了采用 node 的新架构来做这件事情是没有问题的。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;小考&lt;/h2&gt;
+&lt;p&gt;每年的双十一都是对天猫整个技术架构的一次考验，而 2014 年的双十一对于天猫的 node 来说也是一次非常重要的小考：我们在双十一前把天猫首页改成了 node 版本并全量发布了。当时我们在 CDN 的一个独立集群上同时部署了 php 和 node 两套系统，将天猫首页的业务迁移上了 node，而其他的页面仍然采用 php 进行渲染。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://os.alipayobjects.com/rmsportal/uXJwsRwxDsKVAks.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;在双十一当天零点的流量高峰中，node 的表现非常稳定，在同样的环境下，可以说是完胜之前的 php 系统。在此之后，我们终于有足够的底气对老板说：我们要把天猫的 view 这一层全部交给 node。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;规模化之路&lt;/h2&gt;
+&lt;p&gt;在天猫首页上经过了 14 年双十一的考验之后，我们对 node 是否能够支撑天猫的业务场景已经没有疑虑了，剩下的问题就是如何大规模的将 node 应用到天猫的各个业务上去。&lt;/p&gt;
+&lt;p&gt;首先我们解决的第一件事情是将天猫前端的模块化开发体系和资源加载方案融入到 node 中，然后推广到各个业务线上，然后又基于 node 构建了一个模块化页面搭建平台，打通前端、运营和后端数据产出系统，承接了天猫所有活动页和频道页等强运营需求的页面。具体的技术方案大家可以查看前一篇文章：&lt;a href=&quot;https://github.com/tmallfe/tmallfe.github.io/issues/28&quot;&gt;天猫双11前端分享系列（四）：大规模 Node.js 应用&lt;/a&gt;。&lt;/p&gt;
+&lt;p&gt;通过这一系列的技术改造之后，我们&lt;strong&gt;&lt;em&gt;把所有新的业务需求全部使用 node 进行渲染&lt;/em&gt;&lt;/strong&gt;，然后将之前所有用 php 渲染的页面迁移到 node 之上，仅仅用了几个月时间，基本将天猫移动端的 web 页面和所有的活动页、频道页都迁移完成。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;双十一大考&lt;/h2&gt;
+&lt;p&gt;经过大半年时间的重构和迁移，到今年年中的时候，天猫的大部分消费者端的页面都已经跑在了 node 之上，这时又要开始准备新一年的双十一了，比起去年只有一个天猫首页而言，对 node 的压力大了不止一个数量级。&lt;/p&gt;
+&lt;p&gt;我们评估基于今年的访问量，如果我们再把天猫首页、活动页直接放在 CDN 上进行渲染，对于 CDN 的机器成本来说是不可接受的，而且随着机器数量的增加，对于文件同步系统的压力也越来越大，效率越来越低。因此我们和 CDN 团队合作，将所有的活动页面从直接渲染模式迁移到缓存化 CDN + 源站的模式，并在这个模式下&lt;a href=&quot;https://github.com/tmallfe/tmallfe.github.io/issues/28&quot;&gt;对 node 应用的监控和稳定性上做了非常多的工作&lt;/a&gt;。
+而对于那些应用集群上的业务，我们也统一做了版本更新、监控完善和性能压测容量评估，保证各个业务方使用的 node 容器的稳定性。&lt;/p&gt;
+&lt;p&gt;最终，在今年的双十一中，node 支撑了天猫消费者端在无线设备上绝大多数的 web 页面渲染，PC 上除了核心链路外的绝大部分页面渲染工作，并且表现非常稳定，未出现任何一起由 node 引发的线上故障，而基于缓存化 CDN 的活动页面渲染服务，支撑双十一零点高峰的访问量也毫无压力，用少量的机器完成了去年双十一巨量投入才解决的问题。&lt;/p&gt;
+&lt;h2 id=&quot;end&quot;&gt;End&lt;/h2&gt;
+&lt;p&gt;记得在去年刚开始在天猫推动 node 的时候做了一个 slide 和大老板汇报，中间有一页是介绍业界是如何使用 node 的：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://os.alipayobjects.com/rmsportal/oVfqRNBysQYwpDR.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;在一年多之后的今天，天猫的 node 应用经过这次双十一的考验之后，相信也完全有资格出现在这页 slide 之上了！&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[天猫双11前端分享系列（五）：解密2015狂欢城]]></title><link>http://acyort.github.io/posts/2015/12/119858572.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/12/119858572.html</guid><dc:creator><![CDATA[maisui99]]></dc:creator><pubDate>Tue, 01 Dec 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;&lt;img src=&quot;http://img.alicdn.com/tps/i2/TB114vtKFXXXXa8XVXXfZKX1FXX-960-540.jpg&quot; alt=&quot;截图&quot;&gt;&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;性能&lt;/h2&gt;
+&lt;h3 id=&quot;canvas-cache&quot;&gt;Canvas Cache&lt;/h3&gt;
+&lt;p&gt;Canvas Cache就是使用一个额外的Canvas来保存已经绘制过的内容，下一次使用的时候直接从这个Canvas上读取，这样就可以大大减少Canvas的绘制次数，例如原先首屏绘制次数约为75左右，使用cache后的次数约为28，减少了62.67%，在三四环会更明显，因为没有动画，所有内容都可以cache。&lt;/p&gt;
+&lt;p&gt;实测设备越低端性能提升越明显，下面是一个页面在不同平台下的消耗时间对比：&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;设备&lt;/th&gt;
+&lt;th&gt;不使用cache&lt;/th&gt;
+&lt;th&gt;使用cache&lt;/th&gt;
+&lt;th&gt;比值&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;PC&lt;/td&gt;
+&lt;td&gt;16ms&lt;/td&gt;
+&lt;td&gt;14ms&lt;/td&gt;
+&lt;td&gt;87.5%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Moto X&lt;/td&gt;
+&lt;td&gt;75ms&lt;/td&gt;
+&lt;td&gt;56ms&lt;/td&gt;
+&lt;td&gt;74.67%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Moto G&lt;/td&gt;
+&lt;td&gt;246ms&lt;/td&gt;
+&lt;td&gt;127ms&lt;/td&gt;
+&lt;td&gt;51.62%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;iPhone5&lt;/td&gt;
+&lt;td&gt;170ms&lt;/td&gt;
+&lt;td&gt;45ms&lt;/td&gt;
+&lt;td&gt;26.47%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;从结果看效果还是很明显的，而且这个只是缓存了6次绘制的结果，实际使用中会缓存个数约为50左右，效果会更明显。&lt;/p&gt;
+&lt;p&gt;一开始使用一个Canvas直接缓存所有内容，后来发现Canvas大小是有限制的，然后就实现了一个自动切片成多个Canvas Cache的方案，这套cache方案后面会集成到&lt;a href=&quot;http://hilo-js.github.io/&quot;&gt;Hilo&lt;/a&gt;中。&lt;/p&gt;
+&lt;h3 id=&quot;-hilo-http-hilo-js-github-io-&quot;&gt;&lt;a href=&quot;http://hilo-js.github.io/&quot;&gt;Hilo&lt;/a&gt; 定制优化&lt;/h3&gt;
+&lt;p&gt;针对Canvas的最主要优化方案就是尽量减少Canvas API的调用，在对狂欢城做了大量profile后，发现&lt;a href=&quot;http://hilo-js.github.io/&quot;&gt;Hilo&lt;/a&gt;中每次drawImage都会调用&lt;code&gt;ctx.save();ctx.translate(x, y);ctx.drawImage(...);ctx.restore();&lt;/code&gt;，这里&lt;a href=&quot;http://hilo-js.github.io/&quot;&gt;Hilo&lt;/a&gt;主要是为了保证在所有情况(例如缩放，旋转等)下均不出错，所以才这样处理，但是再狂欢城中并不需要做旋转等复杂的变换，所以将这里的绘制直接改为使用&lt;code&gt;ctx.drawImage&lt;/code&gt;来实现。这样可以节省大量运行时间，因为在狂欢城基本上全是图片！&lt;/p&gt;
+&lt;p&gt;实测性能提升非常明显，下面是消耗时间对比：&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;设备&lt;/th&gt;
+&lt;th&gt;优化前&lt;/th&gt;
+&lt;th&gt;优化后&lt;/th&gt;
+&lt;th&gt;比值&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;PC&lt;/td&gt;
+&lt;td&gt;30ms&lt;/td&gt;
+&lt;td&gt;15ms&lt;/td&gt;
+&lt;td&gt;50%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Moto X&lt;/td&gt;
+&lt;td&gt;138ms&lt;/td&gt;
+&lt;td&gt;76ms&lt;/td&gt;
+&lt;td&gt;55.07%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Moto G&lt;/td&gt;
+&lt;td&gt;435ms&lt;/td&gt;
+&lt;td&gt;216ms&lt;/td&gt;
+&lt;td&gt;49.66%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;iPhone5&lt;/td&gt;
+&lt;td&gt;225ms&lt;/td&gt;
+&lt;td&gt;152ms&lt;/td&gt;
+&lt;td&gt;67.56%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h3 id=&quot;-&quot;&gt;视窗内渲染，懒加载及加载限流&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;视窗内渲染，就是只渲染可视区域的元素，以减少绘制消耗&lt;/li&gt;
+&lt;li&gt;懒加载，就是图片资源一开始是不加载的，在用户滚动到附近区域的时候才加载，减少网络请求&lt;/li&gt;
+&lt;li&gt;加载限流，由于使用懒加载机制，当用户快速滑动到比较远的区域时，会瞬间触发大量资源的加载，这个时候会发现页面变得非常卡，加载完成后变好了，所以就使用了限流的方案，限制同时只能加载4个图片，并实时调整加载顺序，优先加载用户当前可见区域的图片&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&quot;-&quot;&gt;地皮拼合绘制场景&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;使用地皮拼合的方案减少了很多图片资源，因为大量图片是重用的&lt;/li&gt;
+&lt;li&gt;由于图片的内存占用是根据图片尺寸转换为2的N次方，然后计算大小，所以图片尺寸越大占用内存可能导致指数级增长，狂欢城中的图片都是小图(地图区块都是256以下，其他基本上也是512以下)，所以内存占用上会小很多&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&quot;-&quot;&gt;低端设备降级&lt;/h3&gt;
+&lt;p&gt;在低端设备上使用1倍图片，减少内存占用，并且不显示动画。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;开发效率&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;前期开发了一个地图编辑器，用于编辑地图，因为地图布局变化过好几次，有了这个还是节省了很多时间的&lt;/li&gt;
+&lt;li&gt;PC &amp;amp; 无线大量逻辑共用，大大减少了开发成本。&lt;/li&gt;
+&lt;li&gt;自动化，因为在PC和无线都有高清(2倍)和普通两种方案，所以图片总共会有4种尺寸，而大部分图片都是一样的，这样如果让设计师导出4种尺寸的话，将会是巨大的工作量，而且要更换素材(很频繁)也会发现很麻烦。所以写了一个自动处理图片的gulp任务，可以自动生成多种尺寸的图片，然后压缩、上传到cdn，最后生成一个imgs.js的文件，使用只需要依赖这个js，然后以原始文件名引用即可，非常方便快捷，大大减少了维护大量图片的工作量。&lt;/li&gt;
+&lt;li&gt;同样less中的图片也是使用上面的自动化的结果进行转换的，使用方式很简单&lt;code&gt;background-image: cdn-url(&amp;#39;island-brand-bg-pc.png&amp;#39;);&lt;/code&gt;这样最后会变成&lt;code&gt;background-image: url(&amp;#39;//gw.alicdn.com/tfscom/TB1urfGKXXXXXXBaXXX_pYDSXXX-937-595.png&amp;#39;);&lt;/code&gt;，这样写less的时候就不需要关心图片地址问题，图片上传问题，图片压缩等问题。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;-&quot;&gt;感悟&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;自动化是好东西，能大大减少工作量&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;-&quot;&gt;天猫前端团队招聘&lt;/h2&gt;
+&lt;p&gt;如果你看了这篇文章，对加入天猫前端团队有意向的，可以发简历到join-tmallfe@list.alibaba-inc.com，招聘要求见：&lt;a href=&quot;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&quot;&gt;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&lt;/a&gt;&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[天猫双11前端分享系列（四）：大规模 Node.js 应用]]></title><link>http://acyort.github.io/posts/2015/11/119413587.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/11/119413587.html</guid><dc:creator><![CDATA[dead-horse]]></dc:creator><pubDate>Tue, 26 Jan 2016 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;在刚刚过去的 15 年天猫双十一中，Node.js（后文简称 node） 大放异彩，不仅帮助前端团队快速、高效的解决双十一各个业务上的页面渲染问题，同时在性能和稳定性上也表现非常出色，大大降低了双十一硬件成本的同时，在整个双十一期间未出现任何一起由 node 引发的线上故障。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;覆盖业务&lt;/h2&gt;
+&lt;p&gt;经过一年时间的改造和推进，到 15 年双十一的时候，已经有大量的业务都有了 node 的身影，基本上天猫大部分的 web 页面都是通过 node 渲染出来：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;天猫首页、大部分天猫频道页、双十一会场以及所有天猫的活动页面都全部基于 node 应用提供服务。&lt;/li&gt;
+&lt;li&gt;商品详情、店铺和搜索页等主流程链路上，以及天猫超市和天猫会员等业务线上的页面渲染。&lt;/li&gt;
+&lt;li&gt;提供给内部运营小二的天猫页面搭建平台 web 层基于 node 进行开发，双十一期间在此平台上搭建了超过 1000+ 个双十一相关活动页面。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;-&quot;&gt;工作职责&lt;/h2&gt;
+&lt;p&gt;在上述覆盖了 node 的业务中，node 在其中扮演了多种角色：&lt;/p&gt;
+&lt;h3 id=&quot;-web-&quot;&gt;完整的 web 应用&lt;/h3&gt;
+&lt;p&gt;天猫页面搭建平台即是一个由 node 负责整个 web 端包括业务逻辑和模板渲染等工作的应用。基于支付宝的 node web 框架 chair，通过 hsf 调用和淘宝共建的页面数据存储的接口，用 node 完成业务逻辑处理、页面渲染和前端接口。&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;轻量级的模板渲染容器&lt;/h3&gt;
+&lt;p&gt;通过 node 整合前端的天猫组件规范 MUI，开发了一套专注于模板渲染的 node 容器（wormhole），通过这个 node 容器，前端可以专注于展现层的开发，统一前端的本地和线上的代码运行环境，也让后端摆脱了繁琐的套模板工作，专注于提供数据接口。同时这套容器基于天猫的模块化规范，横向打通了各个业务和应用之间的模块共享。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://img.alicdn.com/tps/TB1Ev7fKFXXXXcMXVXXXXXXXXXX-1150-868.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;基于这个模板容器，我们完成了商品详情、店铺、搜索页以及超市等业务线上的前后端分离工作，大大提升了前端的开发效率，并有效降低了前后端沟通成本。&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;页面渲染服务&lt;/h3&gt;
+&lt;p&gt;同样基于天猫前端的组件规范 MUI 和模板渲染的 node 容器，我们完成了一套模块化搭建页面的系统，同时开发并运维了一个用来渲染基于模块搭建的页面的服务，同时这个服务和阿里的 cache CDN 打通，在保证满足业务需求的前提下，降低消耗的计算资源。&lt;/p&gt;
+&lt;p&gt;基于这个服务，在双十一中提供了 900+ 活动页面的渲染，以及天猫首页和各个频道页的渲染工作，天猫的所有营销引流页面基本都由这个服务提供页面。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;进入正题&lt;/h2&gt;
+&lt;p&gt;上面讲了许多我们用 node 做了什么，以及覆盖了那些业务，现在我们来看看，到底我们是怎样用 node 解决实际的业务需求的。&lt;/p&gt;
+&lt;p&gt;拿这次双十一的会场页举例：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;用户在不同的终端环境下访问 &lt;a href=&quot;https://1111.tmall.com&quot;&gt;https://1111.tmall.com&lt;/a&gt; 这个网址，请求会直接来到 CDN 上。&lt;/li&gt;
+&lt;li&gt;CDN 对用户的终端环境进行判断，并在内存中找到对应终端的缓存文件返回，若未命中缓存，则继续往下执行。&lt;/li&gt;
+&lt;li&gt;CDN 将请求转发到 node 渲染服务，根据终端类型选择不同的页面响应（pc 页面，h5 页面， react-native 页面）。CDN 响应用户请求，并缓存页面。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;在上述流程中，我们看到同一个 url 对应到后端其实是完全不同的页面输出内容，为了达到这个目的，我们和 CDN 团队一起做了许多工作：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;开发了一个 tengine-detector 组件，通过请求的 &lt;code&gt;user-agent&lt;/code&gt; 以及约定的一些 cookie 信息，判断用户的终端类型。并部署到 CDN 上，让 CDN 拥有了终端判断的能力。&lt;/li&gt;
+&lt;li&gt;用户请求到 CDN 上之后，CDN 会根据用户的终端类型分类，设置一个请求头，例如: &lt;code&gt;detector: pc&lt;/code&gt; 表明这个请求的终端设备是 PC 上的浏览器。&lt;/li&gt;
+&lt;li&gt;渲染服务获取到这个头之后，根据 url 和设备类型选择不同的页面返回。返回时设置 &lt;a href=&quot;http://www.w3.org/Protocols/HTTP/Issues/vary-header.html&quot;&gt;&lt;code&gt;vary&lt;/code&gt;&lt;/a&gt; 为 &lt;code&gt;detector&lt;/code&gt;，保证 CDN 根据不同的设备类型缓存不同页面。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;上面提到会根据终端类型对于同一个 url 返回不同的页面，而这些页面其实都是通过一个基于 node 开发的天猫页面搭建平台用模块搭建的。在这个平台上，超过 95% 的模块都拥有 pc 和无线两个版本，本次双十一所有用到的模块都有 react native 的版本。运营只需搭建 PC 上的页面，就会自动生成无线以及 react native 的页面。基于这套方案，我们通过 70+ 高质量的模块，让运营同学完成了超过 900+ 活动页面的搭建。&lt;/p&gt;
+&lt;p&gt;再深入一点，我们如何来完成这些页面或者是模块的呢？首先，我们希望让前端开发做什么？&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;编写模板&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;拿到数据(并处理)，和模板进行结合&lt;/li&gt;
+&lt;li&gt;拿到请求上下文，时间、环境等系统变量来确定不同的展现&lt;/li&gt;
+&lt;li&gt;管理前端资源和依赖&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;我们在 xtemplate 模板引擎的基础上进行扩展，让前端通过编写 xtemplate 模板，在 context 中注入一些必需的页面上下文，扩展 xtemplate 的语法，支持引入前端资源。基于这套模板，我们可以在拿到数据后渲染得到完整的页面，基本满足了开发页面在功能上的所有需求。&lt;/p&gt;
+&lt;p&gt;但是页面中其实有非常多重复性的内容，我们完全可以把他们抽象成一个个的模块，让页面通过模块化的方式来基于模块搭建，在这个过程中我们需要解决几个问题。&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;模块版本和静态资源版本的管理：页面可能引用几十个模块，而这些模块依赖的静态资源有重复、有冲突，因此我们会通过一份统一的 &lt;code&gt;seed&lt;/code&gt; 来进行依赖版本的管理，每一个模块在发布的时候都会打包好自身的依赖关系，而在将所有的模块组合成页面的时候，将所有模块的依赖表重新进行合并和去重，最终保证页面引用的模块和静态资源唯一。同时我们在模板中通过扩展引入了 &lt;code&gt;FELoader&lt;/code&gt;（天猫的静态资源加载器），收集页面的所有静态资源，combo 后插入到页头（css）或者页尾（js）。&lt;/li&gt;
+&lt;li&gt;模块如何拿到相应的数据：对于模块而言，他并不需要知道被哪个页面引用了，所有的页面在引用模块的时候需要将模块所需的数据传递进去。而所有的模块开发者需要编写一份模块需要数据的 JSON Schema 描述，通过这份描述文件，搭建平台、投放系统以及其他使用这个模块的人都能够知道要为这个模块产生什么格式的数据。&lt;/li&gt;
+&lt;li&gt;配套的搭建平台和数据投放平台来让运营自由组合所有的模块生成页面，并为页面上的每一个模块进行数据投放。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;解决完上述问题之后，我们将每一个页面都变成了以下几个部分：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;一份页面的描述文件，声明了这个页面依赖的所有模块，以及渲染这些模块所需的数据的地址。&lt;/li&gt;
+&lt;li&gt;一系列相互独立的模块。&lt;/li&gt;
+&lt;li&gt;一份包含页面上所有模块需要的数据的数据文件。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;最终，我们的渲染服务会根据 URL 和请求的终端环境，找到对应的页面描述文件，请求相应的数据，合并所有的模板渲染成为 HTML 页面。&lt;/p&gt;
+&lt;p&gt;当我们完成了 web 页面的模块化搭建之后回头再看，是不是 react native（RN） 的页面也能够搭建呢？我们只需要所有的模块都有对应的 react native 版本，就可以像搭建 web 的 html 一样搭建渲染出 RN 需要的 js 了！所以本次双十一使用的所有模块都有 RN 版本，并有多个会场采用了 RN 进行搭建，取得了非常不错的效果，在接下来的双十二中，我们所有的会场都会支持 RN，而这一切对于搭建会场的运营来说都是完全透明的。&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;稳定性保障&lt;/h3&gt;
+&lt;p&gt;在阿里，所有的双十一相关应用都需要面临的一个大问题就是稳定性，为了保证能够在几亿用户买买买的时候不掉链子，任何一个应用都需要花很大的精力来保障它的稳定性，node 的应用也一样。&lt;/p&gt;
+&lt;p&gt;对于 node 应用自身而言，我们首先要保证它有充足的测试，通过 mocha + istanbul ，尽可能让测试覆盖每一个功能点和边缘情况。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://img.alicdn.com/tps/TB1THkrKFXXXXaJXFXXXXXXXXXX-649-100.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;需要有完善的监控和报警。在阿里内部，我们已经有了内部的监控系统，对于 node 应用而言，只需要按照要求的格式打印的日志，或者通过自己编写日志采集脚本，就可以轻松的搞定监控和报警。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;错误日志监控：通过采集脚本采集上来并分类，并设置单机报警和阈值和集群报警的阈值，在异常出现时能够及时发现。&lt;/li&gt;
+&lt;li&gt;系统状态监控：内存、CPU、load 等的监控，并设置报警阈值，当系统状态异常时能够及时发现。&lt;/li&gt;
+&lt;li&gt;应用状态监控：QPS、响应时间以及所有的远程调用记录，时刻了解系统的负载和各个依赖节点的服务状态。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;同时，对于 node 应用，我们可以使用阿里云团队提供的 &lt;a href=&quot;http://alinode.aliyun.com/&quot;&gt;alinode&lt;/a&gt; ，他们可以提供更多 node 的日志和监控，并提供了在线的 profiler 和快照功能，方便排查线上异常和性能优化。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://img.alicdn.com/tps/TB1cjECKFXXXXc8XXXXXXXXXXXX-914-1123.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;尽管我们可以对自身的代码做各种测试、各种监控，但是在一个复杂的系统中，各种上下游依赖非常复杂，网络情况也很复杂，这个时候为了保证稳定性，我们还有许多的工作要做。&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;没有单点&lt;/h4&gt;
+&lt;p&gt;假设一个机房的光缆被挖断了，或者机房所在的城市大规模断电了，然后整个天猫的大部分页面都不能访问了，这明显不能接受，所以我们需要在多个城市的多个机房部署我们的服务。如果存放模板文件或者数据文件的服务挂了怎么办？多个节点，主备读取，同时对所有的文件都加上磁盘文件容灾。对外提供服务的整条链路上的每一个依赖都不能够出现单点问题。&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;弱化依赖&lt;/h4&gt;
+&lt;p&gt;在排除完单点问题之后，我们再来审视我们的服务，是不是所有的依赖在挂掉后就无法正常服务了？是否我们对于每个依赖异常都有容灾的方案，弱化掉整条链路上的依赖。&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;预案自动化&lt;/h4&gt;
+&lt;p&gt;对于每一个可能出现问题的环节，我们都需要有针对性的预案，如果这个预案需要人工去执行，就需要思考能否做到自动化。在 node 渲染服务中，可能有各个缓解出问题，链路上的所有预案都要能够自动切换：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;CDN 回源到多个机房，当某个机房异常时能够通过健康检查自动剔除。&lt;/li&gt;
+&lt;li&gt;当源站 load 过高时，服务自动切换到静态版本不做渲染。&lt;/li&gt;
+&lt;li&gt;当模板或者数据的存储节点挂了，通过健康检查自动剔除。&lt;/li&gt;
+&lt;li&gt;...&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;-&quot;&gt;总结&lt;/h2&gt;
+&lt;p&gt;再回过头来看看在天猫我们使用 node 做的事情，不一定很牛逼，但是确实是在天猫现在的业务场景下，一个相对较优的使用方案，不论是在解决前端开发效率、还是提升服务质量方面，都发挥了很重要的作用。而经过了这次双十一的考验，我们也认为它&lt;strong&gt;&lt;em&gt;已经是一个很成熟的工具&lt;/em&gt;&lt;/strong&gt;，可以帮助我们更好的完成我们的工作。&lt;/p&gt;
+&lt;p&gt;node 只是工具，在每一个具体的业务场景下都有最合适的使用方法，而随着业务的发展，node 能做的事情也在变化，我们期望它能在之后能在更多的场景下落地。：）&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;天猫前端团队招聘&lt;/h2&gt;
+&lt;p&gt;如果你看了这篇文章，对加入天猫前端团队有意向的，可以发简历到join-tmallfe@list.alibaba-inc.com，招聘要求见：&lt;a href=&quot;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&quot;&gt;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&lt;/a&gt;&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[天猫双11前端分享系列（三）：浅谈 React Native与双11]]></title><link>http://acyort.github.io/posts/2015/11/118407227.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/11/118407227.html</guid><dc:creator><![CDATA[maisui99]]></dc:creator><pubDate>Mon, 01 Feb 2016 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;h2 id=&quot;-&quot;&gt;目标&lt;/h2&gt;
+&lt;p&gt;希望能透过 react-native 的动态性，将 react native 的优势带入客户端，如手淘、手猫，让使用客户端浏览体验更佳，并且保持动态性，快速协助响应业务。
+斑马(页面搭建平台) 是一套让非技术人员也能自行搭建页面的 CMS 系统，基于Node实现，由天猫自主开发，此系统支持 PC/Mobile 页面，React Native 整入后，让页面搭建上同步产出 PC/Mobile/Native 版本。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;模块构建&lt;/h2&gt;
+&lt;h3 id=&quot;-&quot;&gt;以应用为单位，以頁面为单位&lt;/h3&gt;
+&lt;p&gt;React Native 原设定为应用级别，让整个应用都使用 React Native，但对于手淘、手猫这类应用已经有大量业务跑在线上，无法进行一次性的迁移，在 @一渡、@隐风 等人的努力下，将原先以应用为单位细化以页面为单位，让使用上更佳灵活，让部分页面使用，不需要侵入整个系统。&lt;/p&gt;
+&lt;h3 id=&quot;react-native-&quot;&gt;React Native 模块化與 斑马 结合&lt;/h3&gt;
+&lt;p&gt;模块经由服务端 wormhole 透过 xtemplate 模版语言，将页面上使用到的模块、打底数据、 页面基本设置模块合并后让终端载入，客户端 React Native 容器载入后即可渲染页面。一般页面在使用 8~12 个模块含打抵数据文件大小 gzip 后约 80kb，透过 CDN 加载在 3G/4G/WIFI 下都可达到1秒内渲染完成。&lt;/p&gt;
+&lt;p&gt;React Native 在开发完成到上线这段期间必须要经过打包过程，在与 @正霖 一同努力后将打包工具做了几层细化。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;将基础模块、业务模块分开打包&lt;ul&gt;
+&lt;li&gt;基础模块：一般非 minify 前大约 5 万行代码，现已透过 package app 预载入客户端中。&lt;/li&gt;
+&lt;li&gt;业务代码：一般约数千行，每次根据不同页面重新加载&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;模块分开打包。&lt;ul&gt;
+&lt;li&gt;模块打包同时只打包模块自身业务代码，并将模块依赖关系产出，在服务端 wormhole 进行相同模块   去重，让页面文件大小最佳化。&lt;/li&gt;
+&lt;li&gt;提供更多接口让其他应用整合&lt;/li&gt;
+&lt;li&gt;目前提供命令行工具以及 js 端提供 promise 接口，让后续其他特殊应用想要使用同时更加便利。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;页面基本设置模块编译工具&lt;ul&gt;
+&lt;li&gt;由于 页面基本设置模块也是 React Native 的部份代码，因此也是需要打包，并在打包同时插入 xtemplate 语法，让服务端 wormhole 识别哪些模块必须要插入，模块合并于代码中的哪个区块。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&quot;-&quot;&gt;不同角色各自发挥价值&lt;/h3&gt;
+&lt;p&gt;模块开发者专注在高质量模块开发，数据投放交由数据后端系统，运营根据需求选择模块、填入数据，量化产出页面，让各种频道、营销活动快速搭建。同时产出 PC/Mobile web/Native 页面，让不同平台都能拥有最佳使用体验。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;错误处理、监控、性能、埋点&lt;/h2&gt;
+&lt;p&gt;目前天猫这边在React的应用中处理了包括容器初始化的监控，接入了与客户端Native一致的业务埋点系统和错误监控系统，可查看每一条 JS 错误完整的 stack 以及 RN 容器错误的详细信息，并且相同的错误会被归类在一起，方便统计错误占比。其中 JS 错误分为严重、不严重两种，其中严重错误可能会影响 UI 崩坏或页面渲染异常，通过报警加上错误信息可以更快速的排错&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;基础组件支持&lt;/h2&gt;
+&lt;p&gt;目前基础组件设计都是以 web 模式靠拢，如 web 的 A 标签，RN 上也有完全相同的组件，在参数、行为上也是完全间容。&lt;/p&gt;
+&lt;p&gt;目前天猫自己开发了包括：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;通用逻辑组件，包括埋点等监控&lt;/li&gt;
+&lt;li&gt;LazyloadView，ScrollView/ListView 增加 onScrollEnd, 懒加载图片、懒加载组件、通知組件已被載入功能&lt;/li&gt;
+&lt;li&gt;Button，如同 web 使用的 A 标签，包含跳转、埋点、优惠券功能，懒加载内容功能&lt;/li&gt;
+&lt;li&gt;LoadingView，加载中占位用 loading&lt;/li&gt;
+&lt;li&gt;Image，圖片組件，整合 CrossImage 於其中&lt;/li&gt;
+&lt;li&gt;Grid，布局组件
+...&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;-11-&quot;&gt;双11期间结果&lt;/h2&gt;
+&lt;p&gt;双11期间ReactNative上线共 30 天，从数据上看来，多数状况下首屏性能是优于 web，尤其在 web 端 缓存未命中状况下。另外在 UI 操作体验上，React Native 基本都能达到 60 fps 的流畅体验。&lt;/p&gt;
+&lt;p&gt;就双11后也还有很多优化点持续进行：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;内存问题：就双11所使用的 0.8.0 版本看来仍然不够理想，无法在正确的时间点适当的释放内存。&lt;/li&gt;
+&lt;li&gt;js 加载重复模块：目前已在进行优化，考量使用类似前端 loader 的方式将 js 异步载入，以便在客户端缓存相同模块&lt;/li&gt;
+&lt;li&gt;android 支持：由于 React Native 0.14 开始有对于 android 较完善支持，目前也在针对这块与 ios 的 api 落差抹平。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id=&quot;-&quot;&gt;心得&lt;/h2&gt;
+&lt;p&gt;就双11的这次 React Native ，让我们看到了 React Native 不再只是能够针对应用、页面级别的开发，也可以如 CMS 方式量化的产生内容。当然我们也不满足于当前的状态，还是有相当多的优化点可以进行，让更多业务切入、保持开源、活络的社群，以及最重要的是要能够为业务产生更大价值。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;天猫前端团队招聘&lt;/h2&gt;
+&lt;p&gt;如果你看了这篇文章，对加入天猫前端团队有意向的，可以发简历到join-tmallfe@list.alibaba-inc.com，招聘要求见：&lt;a href=&quot;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&quot;&gt;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&lt;/a&gt;&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[天猫双11前端分享系列(二)：天猫双11页面服务容灾方案大揭秘]]></title><link>http://acyort.github.io/posts/2015/11/118404440.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/11/118404440.html</guid><dc:creator><![CDATA[maisui99]]></dc:creator><pubDate>Tue, 01 Dec 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;会场活动页，承载了促销商品导流功能，是消费者的购物入口，在双11活动中的地位可谓重中之重。保障活动页的快速稳定可用，是非常非常重要的。这次天猫双11会场页面渲染由wormhole来承担（wormhole本身会在后续的文章中详细介绍），下面介绍一下wormhole的容灾方案。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;技术方案&lt;/h2&gt;
+&lt;h3 id=&quot;-&quot;&gt;动态降频&lt;/h3&gt;
+&lt;p&gt;wormhole主要消耗性能的地方就在模板引擎渲染这部分，在并发访问量大的情况下，频繁的模板渲染会导致系统负载急剧飙升，导致响应延迟。为了保证大并发量下，足够快速的响应，针对的做了动态降频方案，具体的见下图：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://img4.tbcdn.cn/L1/461/1/9f1d33b9ef10b0d06d86b22f43f8692359001973.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;整个渲染策略就是，定时备份页面到OSS集群，每次请求过来，都会去判断当前系统Load是否过载，若果过载则直接读取上次备份的页面返回，而不使用模板引擎渲染，达到动态降低系统负载，快速响应的目的。&lt;/p&gt;
+&lt;h3 id=&quot;cdn-&quot;&gt;CDN兜底&lt;/h3&gt;
+&lt;p&gt;动态降频能够保证大部分情况下的快速响应；但是，如果wormhole集群全部当机，则也无能为了。为了确保双11万无一失，还得有一招后手。为此，我们做了一个兜底方案，见下图：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://img3.tbcdn.cn/L1/461/1/65480a900d17fef08c539b478a12122300bbe3de.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;同样类似于第一个方案，也会定时备份页面到OSS集群，不同的是，这次备份到另一个异地的OSS机房，以防止OSS服务因不可抗力挂掉；如果发生了最极端的情况，源站全部挂掉，由当天的值班人员，手工切换CDN指向已经备份了的OSS文件，保障页面可访问。&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;监控&lt;/h3&gt;
+&lt;p&gt;wormhole基于Node平台开发，我们知道Node平台长期以来，对内存使用监控这块一直很薄弱；对线上服务内存泄露排查基本无从入手；Node服务就像一个黑盒，只能祈祷不要出错，出错也只能使用万能的重启大法。为了弥补这一块，alinode团队推出了监控系统，重点解决这些痛点问题。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;总结&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;没有完美的方案，必须要结合具体场景做调整。必要时，人工干预也是需要的。&lt;/li&gt;
+&lt;li&gt;wormhole服务超级稳定，一条容灾方案也没有执行。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;-&quot;&gt;天猫前端团队招聘&lt;/h2&gt;
+&lt;p&gt;如果你看了这篇文章，对加入天猫前端团队有意向的，可以发简历到join-tmallfe@list.alibaba-inc.com，招聘要求见：&lt;a href=&quot;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&quot;&gt;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&lt;/a&gt;&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[天猫双11前端分享系列（一）：活动页面的性能优化]]></title><link>http://acyort.github.io/posts/2015/11/118403371.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/11/118403371.html</guid><dc:creator><![CDATA[maisui99]]></dc:creator><pubDate>Sun, 24 Jan 2016 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;h2 id=&quot;-&quot;&gt;数据结果&lt;/h2&gt;
+&lt;p&gt;无线优先从去年开始推行，今年更是全面无线化，双11无线业务成交拿到了不错的结果，性能也迈出了一大步，对比去年双十一页面整体load时间提升了2s秒左右，秒开率达到了70%；&lt;/p&gt;
+&lt;p&gt;去年双11活动会场埋点几个页面的性能，onload均值在4.7s左右(实际情况应该在3-4秒)，导致跳失率非常高。&lt;/p&gt;
+&lt;p&gt;今年双十一后的数据情况：&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;2G平均加载完成时间&lt;/th&gt;
+&lt;th&gt;3G平均加载完成时间&lt;/th&gt;
+&lt;th&gt;4G平均加载完成时间&lt;/th&gt;
+&lt;th&gt;Wi-Fi平均加载完成时间&lt;/th&gt;
+&lt;th&gt;wifi页面秒开占比&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;4s&lt;/td&gt;
+&lt;td&gt;4s&lt;/td&gt;
+&lt;td&gt;2s&lt;/td&gt;
+&lt;td&gt;2s&lt;/td&gt;
+&lt;td&gt;70%&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id=&quot;-&quot;&gt;做了什么&lt;/h2&gt;
+&lt;h3 id=&quot;-&quot;&gt;体积优化&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;全局图片开关管控，针对商品、店铺、页头、入口图等图片通过开关全局系数裁剪压缩处理，降低页面图片整体体积；&lt;/li&gt;
+&lt;li&gt;zCache打包，js和css离线化，减少固定大资源阻塞和请求时间耗损；&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&quot;-&quot;&gt;请求优化&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;通过全局开关控制，针对走节点懒加载模块图片做域名收敛管控，降低Mobile端的http建连和dns握手的成本；&lt;/li&gt;
+&lt;li&gt;常用图标iconfont化，减少请求；&lt;/li&gt;
+&lt;li&gt;节点懒加载接入，避免非首屏dom载入；&lt;/li&gt;
+&lt;li&gt;空背景图请求修复，避免资源耗损；&lt;/li&gt;
+&lt;li&gt;模块小图片base64化，减少不必要的请求；&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&quot;-&quot;&gt;渲染优化&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;gif动画去处和部分模块高度计算有误兼容避免引起重绘性能耗损；&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;-&quot;&gt;为什么这么做&lt;/h2&gt;
+&lt;h3 id=&quot;-&quot;&gt;体积优化价值&lt;/h3&gt;
+&lt;p&gt;对比去年双11和以往活动提升最明显的地方在于，针对所有图片均作了裁剪压缩处理，由于活动业务的特殊性，和目前在源头没能控制住图片的大小，往往一张页头图片或运营从detail页提取的商品图片就能达到300k，整体页面体积能超过1M（首屏600k左右），而现在通过CDN的裁剪压缩后一张图片大小能缩小70%左右，针对所有图片处理后页面整体体积和效率缩减至少一半，以一个简单双十一页面为例：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;压缩处理前，首屏体积520k，finish时间5.83秒&lt;/li&gt;
+&lt;li&gt;压缩处理后，首屏体积315k，finish时间2.87秒&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;预加载是这次手淘新发起的解决方案，将页面中静态资源预加载到手淘客户端，减少这些静态资源请求，这套方案也正好解决了，天猫目前繁杂的业务下诞生的一些固定大资源的问题。详细会在相关文章中再详细介绍&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;请求优化重点&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;域名收敛：在无线端http建连和dns握手决定资源加载速度，cdn域名分发方法反而不适用，同时手淘httpdns服务在启动的时候就会对白名单的域名进行域名解析,返回对应服务的最近ip（各运营商），端口号，协议类型，心跳 等信息，使用收敛后白名单中的域名，在手淘下返回会提升资源加载速度。&lt;/li&gt;
+&lt;li&gt;图片base64和iconfont合并：很多常用小图标大家针对自己模块都做了合并或单独处理，这样带来的问题是模块搭建完页面后，需要花费不必要的时间加载图片，无线下那怕一张0.5k的小图片，也可能会花费1s的时间去请求，影响页面的load速度。&lt;/li&gt;
+&lt;li&gt;空白请求的去除：模块换肤中很多背景图片，使用的空请求，实际上空请求也是会花费请求时间，
+空白请求也会耗费时间。&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3 id=&quot;-&quot;&gt;优化中的痛点&lt;/h3&gt;
+&lt;ol&gt;
+&lt;li&gt;由于目前预加载无法解combo，而造势、预热期间模块发布比较频繁，影响预加载后的命中，特别是全局模块，直接会导致页面升级发布后失效(无法命中)，无法作为长期方案&lt;/li&gt;
+&lt;li&gt;脚本体积过大，目前基础脚本文件大小在100k上，占了我们规范标准的一半以上体积。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id=&quot;-&quot;&gt;关于体会&lt;/h2&gt;
+&lt;p&gt;目前天猫的页面基本上都还在基于KISSY搭建，原来的目的是为了保持PC/Mobile端技术的一致性和简单性，提高工作效率和工程化能力。而这在全面无线化的今天，已经成为一个瓶颈，这也是天猫后续技术发展需要解决的一个非常重要的问题。&lt;/p&gt;
+&lt;p&gt;性能这块活动目前做的远远不够，看向手淘，还有太多太多的东西要做，相比繁杂的业务压力，确实需要缓缓，放慢手中的业务，将性能和品质提升上去。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;天猫前端团队招聘&lt;/h2&gt;
+&lt;p&gt;如果你看了这篇文章，对加入天猫前端团队有意向的，可以发简历到join-tmallfe@list.alibaba-inc.com，招聘要求见：&lt;a href=&quot;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&quot;&gt;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&lt;/a&gt;&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[天猫双11前端分享系列]]></title><link>http://acyort.github.io/posts/2015/11/118400866.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/11/118400866.html</guid><dc:creator><![CDATA[maisui99]]></dc:creator><pubDate>Mon, 18 Jan 2016 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;天猫作为阿里双11的主战场，承担了数以百计的页面，亿级的访问及各类复杂的系统包括搜索、商品详情、交易等。&lt;/p&gt;
+&lt;p&gt;为了双11，我们做了N多的准备，包括&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;页面性能优化&lt;/li&gt;
+&lt;li&gt;手机客户端上ReactNative的应用&lt;/li&gt;
+&lt;li&gt;Node服务的搭建&lt;/li&gt;
+&lt;li&gt;前端业务的监控&lt;/li&gt;
+&lt;li&gt;页面搭建系统的建设
+....&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;虽然由于XX的原因，每一项技术都不能讲到特别细致，但是我们会努力做到让你们看完有所收获。&lt;/p&gt;
+&lt;p&gt;目录：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/tmallfe/tmallfe.github.io/issues/25&quot;&gt;天猫双11前端分享系列（一）：活动页面的性能优化&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/tmallfe/tmallfe.github.io/issues/26&quot;&gt;天猫双11前端分享系列(二)：天猫双11页面服务容灾方案大揭秘&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/tmallfe/tmallfe.github.io/issues/27&quot;&gt;天猫双11前端分享系列（三）：浅谈 React Native与双11&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/tmallfe/tmallfe.github.io/issues/28&quot;&gt;天猫双11前端分享系列（四）：大规模 Node.js 应用&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/tmallfe/tmallfe.github.io/issues/29&quot;&gt;天猫双11前端分享系列（五）：解密2015狂欢城&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/tmallfe/tmallfe.github.io/issues/30&quot;&gt;天猫双11前端分享系列（六）：大规模 Node.js 应用（续）&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/tmallfe/tmallfe.github.io/issues/32&quot;&gt;天猫双11前端分享系列（七）：如何精确识别终端&lt;/a&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;接下来这几天，我们会把内部整理出来的总结分享到这边，尽请期待。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;广告时间&lt;/h2&gt;
+&lt;p&gt;有兴趣来天猫一起提升技术的，可以发简历到join-tmallfe@list.alibaba-inc.com，&lt;a href=&quot;https://job.alibaba.com/zhaopin/position_detail.htm?positionId=3504&quot;&gt;招聘要求&lt;/a&gt;&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[轻松入门React和Webpack]]></title><link>http://acyort.github.io/posts/2015/06/84446634.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/06/84446634.html</guid><dc:creator><![CDATA[LingyuCoder]]></dc:creator><pubDate>Tue, 02 Feb 2016 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;最近在学习React.js，之前都是直接用最原生的方式去写React代码，发现组织起来特别麻烦，之前听人说用Webpack组织React组件得心应手，就花了点时间学习了一下，收获颇丰&lt;/p&gt;
+&lt;h2 id=&quot;-react&quot;&gt;说说React&lt;/h2&gt;
+&lt;p&gt;一个组件，有自己的结构，有自己的逻辑，有自己的样式，会依赖一些资源，会依赖某些其他组件。比如日常写一个组件，比较常规的方式：&lt;/p&gt;
+&lt;p&gt;－ 通过前端模板引擎定义结构
+－ JS文件中写自己的逻辑
+－ CSS中写组件的样式
+－ 通过RequireJS、SeaJS这样的库来解决模块之间的相互依赖，
+那么在React中是什么样子呢？&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;结构和逻辑&lt;/h3&gt;
+&lt;p&gt;在React的世界里，结构和逻辑交由JSX文件组织，React将模板内嵌到逻辑内部，实现了一个JS代码和HTML混合的JSX。&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;结构&lt;/h4&gt;
+&lt;p&gt;在JSX文件中，可以直接通过&lt;code&gt;React.createClass&lt;/code&gt;来定义组件：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; CustomComponent = React.creatClass({
+    render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt;&lt;/span&gt;{
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&amp;lt;div className=&lt;span class=&quot;hljs-string&quot;&gt;&quot;custom-component&quot;&lt;/span&gt;&amp;gt;&amp;lt;/div&amp;gt;);
+    }
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;通过这种方式可以很方便的定义一个组件，组件的结构定义在render函数中，但这并不是简单的模板引擎，我们可以通过js方便、直观的操控组件结构，比如我想给组件增加几个节点：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;var CustomComponent = React.creatClass({
+    render: function(){
+        var $nodes = [&lt;span class=&quot;hljs-string&quot;&gt;&apos;h&apos;&lt;/span&gt;,&lt;span class=&quot;hljs-string&quot;&gt;&apos;e&apos;&lt;/span&gt;,&lt;span class=&quot;hljs-string&quot;&gt;&apos;l&apos;&lt;/span&gt;,&lt;span class=&quot;hljs-string&quot;&gt;&apos;l&apos;&lt;/span&gt;,&lt;span class=&quot;hljs-string&quot;&gt;&apos;o&apos;&lt;/span&gt;].map(function(str){
+            return (&amp;lt;span&amp;gt;{str}&amp;lt;/span&amp;gt;);
+        });
+        return (&amp;lt;div className=&lt;span class=&quot;hljs-string&quot;&gt;&quot;custom-component&quot;&lt;/span&gt;&amp;gt;{$nodes}&amp;lt;/div&amp;gt;);
+    }
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;通过这种方式，React使得组件拥有灵活的结构。那么React又是如何处理逻辑的呢？&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;逻辑&lt;/h4&gt;
+&lt;p&gt;写过前端组件的人都知道，组件通常首先需要相应自身DOM事件，做一些处理。必要时候还需要暴露一些外部接口，那么React组件要怎么做到这两点呢？&lt;/p&gt;
+&lt;h5 id=&quot;-&quot;&gt;事件响应&lt;/h5&gt;
+&lt;p&gt;比如我有个按钮组件，点击之后需要做一些处理逻辑，那么React组件大致上长这样：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; ButtonComponent = React.createClass({
+    render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt;&lt;/span&gt;{
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&amp;lt;button&amp;gt;屠龙宝刀，点击就送&amp;lt;/button&amp;gt;);
+    }
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;点击按钮应当触发相应地逻辑，一种比较直观的方式就是给button绑定一个&lt;code&gt;onclick&lt;/code&gt;事件，里面就是需要执行的逻辑了：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;hljs-title&quot;&gt;getDragonKillingSword&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt; &lt;/span&gt;{
+    &lt;span class=&quot;hljs-comment&quot;&gt;//送宝刀&lt;/span&gt;
+}
+&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; ButtonComponent = React.createClass({
+    render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt;&lt;/span&gt;{
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&amp;lt;button onclick=&lt;span class=&quot;hljs-string&quot;&gt;&quot;getDragonKillingSword()&quot;&lt;/span&gt;&amp;gt;屠龙宝刀，点击就送&amp;lt;/button&amp;gt;);
+    }
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;但事实上&lt;code&gt;getDragonKillingSword()&lt;/code&gt;的逻辑属于组件内部行为，显然应当包装在组件内部，于是在React中就可以这么写：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; ButtonComponent = React.createClass({
+    getDragonKillingSword: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt;&lt;/span&gt;{
+        &lt;span class=&quot;hljs-comment&quot;&gt;//送宝刀&lt;/span&gt;
+    },
+    render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt;&lt;/span&gt;{
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&amp;lt;button onClick={&lt;span class=&quot;hljs-keyword&quot;&gt;this&lt;/span&gt;.getDragonKillingSword}&amp;gt;屠龙宝刀，点击就送&amp;lt;/button&amp;gt;);
+    }
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;这样就实现内部事件的响应了，那如果需要暴露接口怎么办呢？&lt;/p&gt;
+&lt;h5 id=&quot;-&quot;&gt;暴露接口&lt;/h5&gt;
+&lt;p&gt;事实上现在&lt;code&gt;getDragonKillingSword&lt;/code&gt;已经是一个接口了，如果有一个父组件，想要调用这个接口怎么办呢？&lt;/p&gt;
+&lt;p&gt;父组件大概长这样：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; ImDaddyComponent = React.createClass({
+    render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt;&lt;/span&gt;{
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (
+            &amp;lt;div&amp;gt;
+                &lt;span class=&quot;hljs-comment&quot;&gt;//其他组件&lt;/span&gt;
+                &amp;lt;ButtonComponent /&amp;gt;
+                &lt;span class=&quot;hljs-comment&quot;&gt;//其他组件&lt;/span&gt;
+            &amp;lt;/div&amp;gt;
+        );
+    }
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;那么如果想手动调用组件的方法，首先在ButtonComponent上设置一个&lt;code&gt;ref=&amp;quot;&amp;quot;&lt;/code&gt;属性来标记一下，比如这里把子组件设置成&lt;code&gt;&amp;lt;ButtonComponent ref=&amp;quot;getSwordButton&amp;quot;/&amp;gt;&lt;/code&gt;，那么在父组件的逻辑里，就可以在父组件自己的方法中通过这种方式来调用接口方法：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-selector-tag&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;hljs-selector-class&quot;&gt;.refs&lt;/span&gt;&lt;span class=&quot;hljs-selector-class&quot;&gt;.getSwordButton&lt;/span&gt;&lt;span class=&quot;hljs-selector-class&quot;&gt;.getDragonKillingSword&lt;/span&gt;();
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;看起来屌屌哒~那么问题又来了，父组件希望自己能够按钮点击时调用的方法，那该怎么办呢？&lt;/p&gt;
+&lt;h5 id=&quot;-&quot;&gt;配置参数&lt;/h5&gt;
+&lt;p&gt;父组件可以直接将需要执行的函数传递给子组件：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;ButtonComponent&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;clickCallback&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{this.getSwordButtonClickCallback}&lt;/span&gt;/&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;然后在子组件中调用父组件方法：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; ButtonComponent = React.createClass({
+    render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt;&lt;/span&gt;{
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&amp;lt;button onClick={&lt;span class=&quot;hljs-keyword&quot;&gt;this&lt;/span&gt;.props.clickCallback}&amp;gt;屠龙宝刀，点击就送&amp;lt;/button&amp;gt;);
+    }
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;子组件通过&lt;code&gt;this.props&lt;/code&gt;能够获取在父组件创建子组件时传入的任何参数，因此&lt;code&gt;this.props&lt;/code&gt;也常被当做配置参数来使用&lt;/p&gt;
+&lt;p&gt;屠龙宝刀每个人只能领取一把，按钮点击一下就应该灰掉，应当在子组件中增加一个是否点击过的状态，这又应当处理呢？&lt;/p&gt;
+&lt;h5 id=&quot;-&quot;&gt;组件状态&lt;/h5&gt;
+&lt;p&gt;在React中，每个组件都有自己的状态，可以在自身的方法中通过&lt;code&gt;this.state&lt;/code&gt;取到，而初始状态则通过&lt;code&gt;getInitialState()&lt;/code&gt;方法来定义，比如这个屠龙宝刀按钮组件，它的初始状态应该是没有点击过，所以&lt;code&gt;getInitialState&lt;/code&gt;方法里面应当定义初始状态&lt;code&gt;clicked: false&lt;/code&gt;。而在点击执行的方法中，应当修改这个状态值为&lt;code&gt;click: true&lt;/code&gt;：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; ButtonComponent = React.createClass({
+    getInitialState: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt;&lt;/span&gt;{
+        &lt;span class=&quot;hljs-comment&quot;&gt;//确定初始状态&lt;/span&gt;
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; {
+            clicked: &lt;span class=&quot;hljs-literal&quot;&gt;false&lt;/span&gt;
+        };
+    },
+    getDragonKillingSword: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt;&lt;/span&gt;{
+        &lt;span class=&quot;hljs-comment&quot;&gt;//送宝刀&lt;/span&gt;
+
+        &lt;span class=&quot;hljs-comment&quot;&gt;//修改点击状态&lt;/span&gt;
+        &lt;span class=&quot;hljs-keyword&quot;&gt;this&lt;/span&gt;.setState({
+            clicked: &lt;span class=&quot;hljs-literal&quot;&gt;true&lt;/span&gt;
+        });
+    },
+    render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt;&lt;/span&gt;{
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&amp;lt;button onClick={&lt;span class=&quot;hljs-keyword&quot;&gt;this&lt;/span&gt;.getDragonKillingSword}&amp;gt;屠龙宝刀，点击就送&amp;lt;/button&amp;gt;);
+    }
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;这样点击状态的维护就完成了，那么render函数中也应当根据状态来维护节点的样式，比如这里将按钮设置为&lt;code&gt;disabled&lt;/code&gt;，那么render函数就要添加相应的判断逻辑：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;render: function(){
+    var clicked = this.state.clicked&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;hljs-keyword&quot;&gt;if&lt;/span&gt;(clicked)
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&amp;lt;&lt;span class=&quot;hljs-keyword&quot;&gt;button&lt;/span&gt; disabled=&lt;span class=&quot;hljs-string&quot;&gt;&quot;disabled&quot;&lt;/span&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;onClick&lt;/span&gt;={this.getDragonKillingSword}&amp;gt;屠龙宝刀，点击就送&amp;lt;/&lt;span class=&quot;hljs-keyword&quot;&gt;button&lt;/span&gt;&amp;gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;hljs-keyword&quot;&gt;else&lt;/span&gt; 
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&amp;lt;&lt;span class=&quot;hljs-keyword&quot;&gt;button&lt;/span&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;onClick&lt;/span&gt;={this.getDragonKillingSword}&amp;gt;屠龙宝刀，点击就送&amp;lt;/&lt;span class=&quot;hljs-keyword&quot;&gt;button&lt;/span&gt;&amp;gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h4 id=&quot;-&quot;&gt;小节&lt;/h4&gt;
+&lt;p&gt;这里简单介绍了通过JSX来管理组件的结构和逻辑，事实上React给组件还定义了很多方法，以及组件自身的生命周期，这些都使得组件的逻辑处理更加强大&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;资源加载&lt;/h3&gt;
+&lt;p&gt;CSS文件定义了组件的样式，现在的模块加载器通常都能够加载CSS文件，如果不能一般也提供了相应的插件。事实上CSS、图片可以看做是一种资源，因为加载过来后一般不需要做什么处理。&lt;/p&gt;
+&lt;p&gt;React对这一方面并没有做特别的处理，虽然它提供了Inline Style的方式把CSS写在JSX里面，但估计没有多少人会去尝试，毕竟现在CSS样式已经不再只是简单的CSS文件了，通常都会去用Less、Sass等预处理，然后再用像postcss、myth、autoprefixer、cssmin等等后处理。资源加载一般也就简单粗暴地使用模块加载器完成了&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;组件依赖&lt;/h3&gt;
+&lt;p&gt;组件依赖的处理一般分为两个部分：组件加载和组件使用&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;组件加载&lt;/h4&gt;
+&lt;p&gt;React没有提供相关的组件加载方法，依旧需要通过&lt;code&gt;&amp;lt;script&amp;gt;&lt;/code&gt;标签引入，或者使用模块加载器加载组件的JSX和资源文件。&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;组件使用&lt;/h4&gt;
+&lt;p&gt;如果细心，就会发现其实之前已经有使用的例子了，要想在一个组件中使用另外一个组件，比如在&lt;code&gt;ParentComponent&lt;/code&gt;中使用&lt;code&gt;ChildComponent&lt;/code&gt;，就只需要在&lt;code&gt;ParentComponent&lt;/code&gt;的&lt;code&gt;render()&lt;/code&gt;方法中写上&lt;code&gt;&amp;lt;ChildComponent /&amp;gt;&lt;/code&gt;就行了，必要的时候还可以传些参数。&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;疑问&lt;/h3&gt;
+&lt;p&gt;到这里就会发现一个问题，React除了只处理了结构和逻辑，资源也不管，依赖也不管。是的，React将近两万行代码，连个模块加载器都没有提供，更与Angularjs，jQuery等不同的是，他还不带啥脚手架...没有Ajax库，没有Promise库，要啥啥没有...&lt;/p&gt;
+&lt;h4 id=&quot;-dom&quot;&gt;虚拟DOM&lt;/h4&gt;
+&lt;p&gt;那它为啥这么大？因为它实现了一个虚拟DOM（Virtual DOM）。虚拟DOM是干什么的？这就要从浏览器本身讲起&lt;/p&gt;
+&lt;p&gt;如我们所知，在浏览器渲染网页的过程中，加载到HTML文档后，会将文档解析并构建DOM树，然后将其与解析CSS生成的CSSOM树一起结合产生爱的结晶——RenderObject树，然后将RenderObject树渲染成页面（当然中间可能会有一些优化，比如RenderLayer树）。这些过程都存在与渲染引擎之中，渲染引擎在浏览器中是于JavaScript引擎（JavaScriptCore也好V8也好）分离开的，但为了方便JS操作DOM结构，渲染引擎会暴露一些接口供JavaScript调用。由于这两块相互分离，通信是需要付出代价的，因此JavaScript调用DOM提供的接口性能不咋地。各种性能优化的最佳实践也都在尽可能的减少DOM操作次数。&lt;/p&gt;
+&lt;p&gt;而虚拟DOM干了什么？它直接用JavaScript实现了DOM树（大致上）。组件的HTML结构并不会直接生成DOM，而是映射生成虚拟的JavaScript DOM结构，React又通过在这个虚拟DOM上实现了一个 diff 算法找出最小变更，再把这些变更写入实际的DOM中。这个虚拟DOM以JS结构的形式存在，计算性能会比较好，而且由于减少了实际DOM操作次数，性能会有较大提升&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;道理我都懂，可是为什么我们没有模块加载器？&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;所以就需要Webpack了&lt;/p&gt;
+&lt;h2 id=&quot;-webpack&quot;&gt;说说Webpack&lt;/h2&gt;
+&lt;h3 id=&quot;-webpack-&quot;&gt;什么是Webpack？&lt;/h3&gt;
+&lt;p&gt;事实上它是一个打包工具，而不是像RequireJS或SeaJS这样的模块加载器，通过使用Webpack，能够像Node.js一样处理依赖关系，然后解析出模块之间的依赖，将代码打包&lt;/p&gt;
+&lt;h3 id=&quot;-webpack&quot;&gt;安装Webpack&lt;/h3&gt;
+&lt;p&gt;首先得有Node.js&lt;/p&gt;
+&lt;p&gt;然后通过&lt;code&gt;npm install -g webpack&lt;/code&gt;安装webpack，当然也可以通过gulp来处理webpack任务，如果使用gulp的话就&lt;code&gt;npm install --save-dev gulp-webpack&lt;/code&gt;&lt;/p&gt;
+&lt;h3 id=&quot;-webpack&quot;&gt;配置Webpack&lt;/h3&gt;
+&lt;p&gt;Webpack的构建过程需要一个配置文件，一个典型的配置文件大概就是这样&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; webpack = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;webpack&apos;&lt;/span&gt;);
+&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; commonsPlugin = &lt;span class=&quot;hljs-keyword&quot;&gt;new&lt;/span&gt; webpack.optimize.CommonsChunkPlugin(&lt;span class=&quot;hljs-string&quot;&gt;&apos;common.js&apos;&lt;/span&gt;);
+
+&lt;span class=&quot;hljs-keyword&quot;&gt;module&lt;/span&gt;.exports = {
+    entry: {
+        entry1: &lt;span class=&quot;hljs-string&quot;&gt;&apos;./entry/entry1.js&apos;&lt;/span&gt;,
+        entry2: &lt;span class=&quot;hljs-string&quot;&gt;&apos;./entry/entry2.js&apos;&lt;/span&gt;
+    },
+    output: {
+        path: __dirname,
+        filename: &lt;span class=&quot;hljs-string&quot;&gt;&apos;[name].entry.js&apos;&lt;/span&gt;
+    },
+    resolve: {
+        extensions: [&lt;span class=&quot;hljs-string&quot;&gt;&apos;&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;.js&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;.jsx&apos;&lt;/span&gt;]
+    },
+    &lt;span class=&quot;hljs-keyword&quot;&gt;module&lt;/span&gt;: {
+        loaders: [{
+            test: &lt;span class=&quot;hljs-regexp&quot;&gt;/\.js$/&lt;/span&gt;,
+            loader: &lt;span class=&quot;hljs-string&quot;&gt;&apos;babel-loader&apos;&lt;/span&gt;
+        }, {
+            test: &lt;span class=&quot;hljs-regexp&quot;&gt;/\.jsx$/&lt;/span&gt;,
+            loader: &lt;span class=&quot;hljs-string&quot;&gt;&apos;babel-loader!jsx-loader?harmony&apos;&lt;/span&gt;
+        }]
+    },
+    plugins: [commonsPlugin]
+};
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;这里对Webpack的打包行为做了配置，主要分为几个部分：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;entry：指定打包的入口文件，每有一个键值对，就是一个入口文件&lt;/li&gt;
+&lt;li&gt;output：配置打包结果，path定义了输出的文件夹，filename则定义了打包结果文件的名称，filename里面的&lt;code&gt;[name]&lt;/code&gt;会由entry中的键（这里是entry1和entry2）替换&lt;/li&gt;
+&lt;li&gt;resolve：定义了解析模块路径时的配置，常用的就是extensions，可以用来指定模块的后缀，这样在引入模块时就不需要写后缀了，会自动补全&lt;/li&gt;
+&lt;li&gt;module：定义了对模块的处理逻辑，这里可以用loaders定义了一系列的加载器，以及一些正则。当需要加载的文件匹配test的正则时，就会调用后面的loader对文件进行处理，这正是webpack强大的原因。比如这里定义了凡是&lt;code&gt;.js&lt;/code&gt;结尾的文件都是用&lt;code&gt;babel-loader&lt;/code&gt;做处理，而&lt;code&gt;.jsx&lt;/code&gt;结尾的文件会先经过&lt;code&gt;jsx-loader&lt;/code&gt;处理，然后经过&lt;code&gt;babel-loader&lt;/code&gt;处理。当然这些loader也需要通过&lt;code&gt;npm install&lt;/code&gt;安装&lt;/li&gt;
+&lt;li&gt;plugins: 这里定义了需要使用的插件，比如commonsPlugin在打包多个入口文件时会提取出公用的部分，生成common.js&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;当然Webpack还有很多其他的配置，具体可以参照它的&lt;a href=&quot;http://webpack.github.io/docs/configuration.html#entry&quot;&gt;配置文档&lt;/a&gt;&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;执行打包&lt;/h3&gt;
+&lt;p&gt;如果通过&lt;code&gt;npm install -g webpack&lt;/code&gt;方式安装webpack的话，可以通过命令行直接执行打包命令，比如这样：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-shell&quot;&gt;$webpack --config webpack.config.js
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;这样就会读取当前目录下的webpack.config.js作为配置文件执行打包操作&lt;/p&gt;
+&lt;p&gt;如果是通过gulp插件gulp-webpack，则可以在gulpfile中写上gulp任务：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; gulp = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;gulp&apos;&lt;/span&gt;);
+&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; webpack = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;gulp-webpack&apos;&lt;/span&gt;);
+&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; webpackConfig = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./webpack.config&apos;&lt;/span&gt;);
+gulp.task(&lt;span class=&quot;hljs-string&quot;&gt;&quot;webpack&quot;&lt;/span&gt;, &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;(&lt;span class=&quot;hljs-params&quot;&gt;&lt;/span&gt;) &lt;/span&gt;{
+    &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; gulp
+        .src(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./&apos;&lt;/span&gt;)
+        .pipe(webpack(webpackConfig))
+        .pipe(gulp.dest(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./build&apos;&lt;/span&gt;));
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3 id=&quot;-&quot;&gt;组件编写&lt;/h3&gt;
+&lt;h4 id=&quot;-babel-&quot;&gt;使用Babel提升逼格&lt;/h4&gt;
+&lt;p&gt;Webpack使得我们可以使用Node.js的CommonJS规范来编写模块，比如一个简单的Hello world模块，就可以这么处理：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; React = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;react&apos;&lt;/span&gt;);
+
+&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; HelloWorldComponent = React.createClass({
+    displayName: &lt;span class=&quot;hljs-string&quot;&gt;&apos;HelloWorldComponent&apos;&lt;/span&gt;,
+    render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;(&lt;span class=&quot;hljs-params&quot;&gt;&lt;/span&gt;) &lt;/span&gt;{
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;div&lt;/span&gt;&amp;gt;&lt;/span&gt;Hello world&lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;div&lt;/span&gt;&amp;gt;&lt;/span&gt;)&lt;/span&gt;;
+    }
+});
+
+&lt;span class=&quot;hljs-built_in&quot;&gt;module&lt;/span&gt;.exports = HelloWorldComponent;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;等等，这和之前的写法没啥差别啊，依旧没有逼格...程序员敲码要有geek范，要逼格than逼格，这太low了。现在都ES6了，React的代码也要写ES6，&lt;code&gt;babel-loader&lt;/code&gt;就是干这个的。&lt;a href=&quot;https://babeljs.io/&quot;&gt;Babel&lt;/a&gt;能够将ES6代码转换成ES5。首先需要通过命令&lt;code&gt;npm install --save-dev babel-loader&lt;/code&gt;来进行安装，安装完成后就可以使用了，一种使用方式是之前介绍的在&lt;code&gt;webpack.config.js&lt;/code&gt;的loaders中配置，另一种是直接在代码中使用，比如：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; HelloWorldComponent = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;!babel!jsx!./HelloWorldComponent&apos;&lt;/span&gt;);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;那我们应当如何使用Babel提升代码的逼格呢？改造一下之前的HelloWorld代码吧：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;hljs-type&quot;&gt;React&lt;/span&gt; from &lt;span class=&quot;hljs-symbol&quot;&gt;&apos;reac&lt;/span&gt;t&apos;;
+
+export &lt;span class=&quot;hljs-keyword&quot;&gt;default&lt;/span&gt; &lt;span class=&quot;hljs-class&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;class&lt;/span&gt; &lt;span class=&quot;hljs-title&quot;&gt;HelloWorldComponent&lt;/span&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;extends&lt;/span&gt; &lt;span class=&quot;hljs-title&quot;&gt;React&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;Component&lt;/span&gt; &lt;/span&gt;{
+    constructor() {
+        &lt;span class=&quot;hljs-keyword&quot;&gt;super&lt;/span&gt;();
+        &lt;span class=&quot;hljs-keyword&quot;&gt;this&lt;/span&gt;.state = {};
+    }
+    render() {
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&amp;lt;div&amp;gt;&lt;span class=&quot;hljs-type&quot;&gt;Hello&lt;/span&gt; &lt;span class=&quot;hljs-type&quot;&gt;World&lt;/span&gt;&amp;lt;/div&amp;gt;);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;这样在其他组件中需要引入HelloWorldComponent组件，就只要就可以了：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;import&lt;/span&gt; HelloWorldComponent &lt;span class=&quot;hljs-keyword&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;./HelloWorldComponent&apos;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;怎么样是不是更有逼格了？通过import引入模块，还可以直接定义类和类的继承关系，这里也不再需要&lt;code&gt;getInitialState&lt;/code&gt;了，直接在构造函数&lt;code&gt;constructor&lt;/code&gt;中用&lt;code&gt;this.state = xxx&lt;/code&gt;就好了&lt;/p&gt;
+&lt;p&gt;Babel带来的当然还不止这些，在其帮助下还能尝试很多优秀的ES6特性，比如箭头函数，箭头函数的特点就是内部的this和外部保持一致，从此可以和&lt;code&gt;that&lt;/code&gt;、&lt;code&gt;_this&lt;/code&gt;说再见了&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;[&lt;span class=&quot;hljs-symbol&quot;&gt;&apos;H&lt;/span&gt;&apos;, &lt;span class=&quot;hljs-symbol&quot;&gt;&apos;e&lt;/span&gt;&apos;, &lt;span class=&quot;hljs-symbol&quot;&gt;&apos;l&lt;/span&gt;&apos;, &lt;span class=&quot;hljs-symbol&quot;&gt;&apos;l&lt;/span&gt;&apos;, &lt;span class=&quot;hljs-symbol&quot;&gt;&apos;o&lt;/span&gt;&apos;].map((&lt;span class=&quot;hljs-name&quot;&gt;c&lt;/span&gt;) =&amp;gt; {
+    return (&lt;span class=&quot;hljs-name&quot;&gt;&amp;lt;span&amp;gt;&lt;/span&gt;{c}&amp;lt;/span&amp;gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+})&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;其他还有很多，具体可以参照&lt;a href=&quot;https://babeljs.io/docs/learn-es6/&quot;&gt;Babel的学习文档&lt;/a&gt;&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;样式编写&lt;/h4&gt;
+&lt;p&gt;我是一个强烈地Less依赖患者，脱离了Less直接写CSS就会出现四肢乏力、不想干活、心情烦躁等现象，而且还不喜欢在写Less时候加前缀，平常都是gulp+less+autoprefixer直接处理的，那么在Webpack组织的React组件中要怎么写呢？&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;没错，依旧是使用loader&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;可以在&lt;code&gt;webpack.config.js&lt;/code&gt;的loaders中增加Less的配置：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;{
+  &lt;span class=&quot;hljs-attribute&quot;&gt;test&lt;/span&gt;: /\.less$/,
+  loader: &lt;span class=&quot;hljs-string&quot;&gt;&apos;style-loader!css-loader!autoprefixer-loader!less-loader&apos;&lt;/span&gt;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;通过这样的配置，就可以直接在模块代码中引入Less样式了：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;hljs-type&quot;&gt;React&lt;/span&gt; from &lt;span class=&quot;hljs-symbol&quot;&gt;&apos;reac&lt;/span&gt;t&apos;;
+
+require(&apos;./&lt;span class=&quot;hljs-type&quot;&gt;HelloWorldComponent&lt;/span&gt;.less&apos;);
+
+export &lt;span class=&quot;hljs-keyword&quot;&gt;default&lt;/span&gt; &lt;span class=&quot;hljs-class&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;class&lt;/span&gt; &lt;span class=&quot;hljs-title&quot;&gt;HelloWorldComponent&lt;/span&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;extends&lt;/span&gt; &lt;span class=&quot;hljs-title&quot;&gt;React&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;Component&lt;/span&gt; &lt;/span&gt;{
+    constructor() {
+        &lt;span class=&quot;hljs-keyword&quot;&gt;super&lt;/span&gt;();
+        &lt;span class=&quot;hljs-keyword&quot;&gt;this&lt;/span&gt;.state = {};
+    }
+    render() {
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (&amp;lt;div&amp;gt;&lt;span class=&quot;hljs-type&quot;&gt;Hello&lt;/span&gt; &lt;span class=&quot;hljs-type&quot;&gt;World&lt;/span&gt;&amp;lt;/div&amp;gt;);
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h4 id=&quot;-&quot;&gt;其他&lt;/h4&gt;
+&lt;p&gt;Webpack的loader为React组件化提供了很多帮助，像图片也提供了相关的loader：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;{ &lt;span class=&quot;hljs-attribute&quot;&gt;test&lt;/span&gt;: /\.png$/, loader: &lt;span class=&quot;hljs-string&quot;&gt;&quot;url-loader?mimetype=image/png&quot;&lt;/span&gt; }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;更多地loader可以移步&lt;a href=&quot;https://github.com/webpack/docs/wiki/list-of-loaders&quot;&gt;webpack的wiki&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;##在Webpack下实时调试React组件&lt;/p&gt;
+&lt;p&gt;Webpack和React结合的另一个强大的地方就是，在修改了组件源码之后，不刷新页面就能把修改同步到页面上。这里需要用到两个库&lt;code&gt;webpack-dev-server&lt;/code&gt;和&lt;code&gt;react-hot-loader&lt;/code&gt;。&lt;/p&gt;
+&lt;p&gt;首先需要安装这两个库，&lt;code&gt;npm install --save-dev webpack-dev-server react-hot-loader&lt;/code&gt;&lt;/p&gt;
+&lt;p&gt;安装完成后，就要开始配置了，首先需要修改entry配置：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-selector-tag&quot;&gt;entry&lt;/span&gt;: {
+  &lt;span class=&quot;hljs-attribute&quot;&gt;helloworld&lt;/span&gt;: [
+    &lt;span class=&quot;hljs-string&quot;&gt;&apos;webpack-dev-server/client?http://localhost:3000&apos;&lt;/span&gt;,
+    &lt;span class=&quot;hljs-string&quot;&gt;&apos;webpack/hot/only-dev-server&apos;&lt;/span&gt;,
+    &lt;span class=&quot;hljs-string&quot;&gt;&apos;./helloworld&apos;&lt;/span&gt;
+  ]
+},
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;通过这种方式指定资源热启动对应的服务器，然后需要配置&lt;code&gt;react-hot-loader&lt;/code&gt;到loaders的配置当中，比如我的所有组件代码全部放在scripts文件夹下：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;{
+  &lt;span class=&quot;hljs-attribute&quot;&gt;test&lt;/span&gt;: /\.js?$/,
+  loaders: [&lt;span class=&quot;hljs-string&quot;&gt;&apos;react-hot&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;babel&apos;&lt;/span&gt;],
+  include: [path.&lt;span class=&quot;hljs-built_in&quot;&gt;join&lt;/span&gt;(__dirname, &lt;span class=&quot;hljs-string&quot;&gt;&apos;scripts&apos;&lt;/span&gt;)]
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;最后配置一下plugins，加上热替换的插件和防止报错的插件：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-string&quot;&gt;plugins:&lt;/span&gt; [
+  &lt;span class=&quot;hljs-keyword&quot;&gt;new&lt;/span&gt; webpack.HotModuleReplacementPlugin(),
+  &lt;span class=&quot;hljs-keyword&quot;&gt;new&lt;/span&gt; webpack.NoErrorsPlugin()
+]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;这样配置就完成了，但是现在要调试需要启动一个服务器，而且之前配置里映射到&lt;code&gt;http://localhost:3000&lt;/code&gt;，所以就在本地3000端口起个服务器吧，在项目根目录下面建个server.js：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; webpack = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;webpack&apos;&lt;/span&gt;);
+&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; WebpackDevServer = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;webpack-dev-server&apos;&lt;/span&gt;);
+&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; config = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./webpack.config&apos;&lt;/span&gt;);
+
+&lt;span class=&quot;hljs-keyword&quot;&gt;new&lt;/span&gt; WebpackDevServer(webpack(config), {
+  publicPath: config.output.publicPath,
+  hot: &lt;span class=&quot;hljs-literal&quot;&gt;true&lt;/span&gt;,
+  historyApiFallback: &lt;span class=&quot;hljs-literal&quot;&gt;true&lt;/span&gt;
+}).listen(&lt;span class=&quot;hljs-number&quot;&gt;3000&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;localhost&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt; (&lt;span class=&quot;hljs-params&quot;&gt;err, result&lt;/span&gt;) &lt;/span&gt;{
+  &lt;span class=&quot;hljs-keyword&quot;&gt;if&lt;/span&gt; (err) &lt;span class=&quot;hljs-built_in&quot;&gt;console&lt;/span&gt;.log(err);
+  &lt;span class=&quot;hljs-built_in&quot;&gt;console&lt;/span&gt;.log(&lt;span class=&quot;hljs-string&quot;&gt;&apos;Listening at localhost:3000&apos;&lt;/span&gt;);
+});
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;这样就可以在本地3000端口开启调试服务器了，比如我的页面是根目录下地&lt;code&gt;index.html&lt;/code&gt;，就可以直接通过&lt;code&gt;http://localhost:3000/index.html&lt;/code&gt;访问页面，修改React组件后页面也会被同步修改，这里貌似使用了websocket来同步数据。图是一个简单的效果：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://skyinlayerblog.qiniudn.com/blog/test.gif&quot; alt=&quot;Alt text&quot;&gt;&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;结束&lt;/h2&gt;
+&lt;p&gt;React的组件化开发很有想法，而Webpack使得React组件编写和管理更加方便，这里只涉及到了React和Webpack得很小一部分，还有更多的最佳实践有待在学习的路上不断发掘&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[3D互动游戏实践]]></title><link>http://acyort.github.io/posts/2015/05/73342947.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/05/73342947.html</guid><dc:creator><![CDATA[hlissnake]]></dc:creator><pubDate>Thu, 11 Jun 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;h2 id=&quot;-&quot;&gt;神奇的第三维度&lt;/h2&gt;
+&lt;p&gt;很多技术同学都是游戏玩家，3D游戏无疑是画面最棒、投入感最真实、最让人投入的。&lt;/p&gt;
+&lt;p&gt;说起3D，前端工程师们应该都很熟悉，CSS3对3D支持非常好，除部分低端Android机器外，性能和效果都不错。今天来分享下如何基于HTML5陀螺仪，来实现3D虚拟现实效果。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;移动端虚拟现实&lt;/h2&gt;
+&lt;p&gt;虚拟现实大家肯定都了解。VR视觉增强的电影、游戏，市面上已经有很多了。&lt;/p&gt;
+&lt;p&gt;我们这里的VR，就是简单的用手机屏幕来当 虚拟摄像机，让你来“观察”四周，感觉仿佛置身于虚拟环境里。我们团队有两个互动应用&lt;/p&gt;
+&lt;p&gt;星辰大海：&lt;a href=&quot;http://www.tmall.com/go/chn/common/tgp-startui.php&quot;&gt;http://www.tmall.com/go/chn/common/tgp-startui.php&lt;/a&gt; (把活动取消的提示叉掉就行:) )                            &lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms02.alicdn.com/tps/i2/TB1E02nHXXXXXXAXXXXzmJQZVXX-424-416.png_200x200.jpg&quot; alt=&quot;星辰大海&quot;&gt; &lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1pIvgHXXXXXX3XpXXtADpRFXX-719-1280.png_300x300.jpg&quot; alt=&quot;&quot;&gt;，&lt;/p&gt;
+&lt;p&gt;汽车内景: &lt;a href=&quot;http://m.laiwang.com/market/laiwang/tmall-vr-car.php?carid=2&quot;&gt;http://m.laiwang.com/market/laiwang/tmall-vr-car.php?carid=2&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://img.taobaocdn.com/tfscom/TB1qxWZHFXXXXalXXXXwu0bFXXX.png&quot; alt=&quot;汽车内景&quot;&gt;&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1FgLoHXXXXXcYaXXXMFsULXXX-678-912.png_300x300.jpg&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;这是天猫互动在 “陀螺仪感应” 结合 “虚拟3D技术” 的一次尝试，事实证明在某些特定商品(比如汽车)上效果非常好。&lt;/p&gt;
+&lt;p&gt;如果你看完Demo很感兴趣，那接下来让我一步一步分解这里面涉及到的所有内容。&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;矩阵&lt;/h2&gt;
+&lt;p&gt;计算机3D图形和矩阵密切相关，图形API接口也都直接使用矩阵，下面简单列举下矩阵一些简单概念&lt;/p&gt;
+&lt;h4 id=&quot;css3-transform&quot;&gt;CSS3 transform&lt;/h4&gt;
+&lt;p&gt;Transform2d/3d 封装了最基本的变换操作。每个变换都可以转化为矩阵。我们只说虚拟现实涉及的几个3D变换&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;p&gt;rotateX()&lt;/p&gt;
+&lt;p&gt;  &lt;img src=&quot;http://gtms02.alicdn.com/tps/i2/TB1FtsUHpXXXXXDapXX7wxsHpXX-203-72.png&quot; alt=&quot;1&quot;&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;rotateY()&lt;/p&gt;
+&lt;p&gt;  &lt;img src=&quot;http://gtms01.alicdn.com/tps/i1/TB1E8J_HFXXXXcgaXXX7wxsHpXX-203-72.png&quot; alt=&quot;2&quot;&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;rotateZ()&lt;/p&gt;
+&lt;p&gt;  &lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1LK0zHFXXXXXtapXXqItsHpXX-203-71.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;scale3d(sx, sy, sz)&lt;/p&gt;
+&lt;p&gt;  &lt;img src=&quot;http://www.w3.org/TR/css3-transforms/scale3d.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;以上都是&lt;a href=&quot;http://zh.wikipedia.org/wiki/%E6%AD%A3%E4%BA%A4%E7%9F%A9%E9%98%B5&quot;&gt;正交矩阵&lt;/a&gt;，简单说就是坐标系原点不变。&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;p&gt;translate3d 使坐标原点变换，因此使用&lt;a href=&quot;http://zh.wikipedia.org/wiki/%E4%BB%BF%E5%B0%84%E5%8F%98%E6%8D%A2&quot;&gt;&amp;quot;仿射矩阵&amp;quot;&lt;/a&gt;来描述&lt;/p&gt;
+&lt;p&gt;  &lt;img src=&quot;http://www.w3.org/TR/css3-transforms/translate3d.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;rotate3d(x, y, z, a)  这个比较特殊，描述的不是矩阵，而是&lt;a href=&quot;http://zh.wikipedia.org/wiki/%E5%9B%9B%E5%85%83%E6%95%B8&quot;&gt;&amp;quot;四元数&amp;quot;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;详细信息可查看&lt;a href=&quot;https://developer.mozilla.org/en-US/docs/Web/CSS/transform-function&quot;&gt;https://developer.mozilla.org/en-US/docs/Web/CSS/transform-function&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;以汽车内景Demo为例，旋转+透视点距离，使用了rotate+translateZ，手指缩放使用了scale3d。&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;矩阵不满足乘法交互率&lt;/h4&gt;
+&lt;p&gt;多个矩阵变换叠加起来，就是是矩阵相乘。一个很重要的概念：矩阵不满足乘法交互率！这就意味着变换顺序的不同，直接导致最终结果千差万别。&lt;/p&gt;
+&lt;p&gt;通俗的讲就是：每一次变换都是相对上一次变换来做的，参考的坐标系时刻都在变化，无论2D、3D里都一样；&lt;/p&gt;
+&lt;p&gt;所以：translateZ() rotateX() rotateY()  和 rotateY() rotateX() translateZ() 得出的结果完全相反。&lt;/p&gt;
+&lt;p&gt;下一步我们要做的就是：如何将手机陀螺仪的数据正确反映出来！&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;陀螺仪&lt;/h2&gt;
+&lt;h4 id=&quot;-&quot;&gt;欧拉角&lt;/h4&gt;
+&lt;p&gt;说陀螺仪之前，一定要先说这个概念 &lt;a href=&quot;http://zh.wikipedia.org/wiki/%E6%AC%A7%E6%8B%89%E8%A7%92&quot;&gt;欧拉角&lt;/a&gt;。 欧拉角广泛应用于 &lt;a href=&quot;http://en.wikipedia.org/wiki/Euler_angles#Tait.E2.80.93Bryan_angles&quot;&gt;航空航天领域&lt;/a&gt;，当然还有我们最熟悉的 手机陀螺仪方位感应器 &lt;a href=&quot;http://w3c.github.io/deviceorientation/spec-source-orientation.html&quot;&gt;deviceorientaiton&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;欧拉角描述3D空间里的方位，陀螺仪监听接口返回 alpha、beta、gamma 就是标准欧拉角方位。(这是手机端，欧拉角官方名称是 heading，pitch、bank)&lt;/p&gt;
+&lt;p&gt;两个不同的旋转顺序：(heading:45,bank:90) 和（bank:90,pitch:45）在效果是一致的，一个刚体的方位，可以表示成欧拉角多种不同的旋转顺序。也因为欧拉角的不唯一性，会产生“万向锁”的问题。&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;限制性欧拉角&lt;/h4&gt;
+&lt;p&gt;为了保证唯一性，就有了“限制性欧拉角”这个概念。任何一个方位的描述，是按 alpha, beta, gamma 顺序旋转来得出的方位角度的。可以看成三个旋转正交矩阵，顺序相乘得出变换后的坐标，看下面的动态图，来帮助理解&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://upload.wikimedia.org/wikipedia/commons/8/85/Euler2a.gif&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;先绕蓝色Z轴旋转，得出alpha，然后绕绿色轴旋转，得出beta，最后绕红色轴旋转，得出gamma；&lt;/p&gt;
+&lt;p&gt;最后这张示意图一目了然：
+&lt;img src=&quot;http://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Plane.svg/400px-Plane.svg.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;限制性欧拉角有一些特性：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;取值范围：alpha：0-360，beta：+-90，gamma：+-180&lt;/li&gt;
+&lt;li&gt;beta = +-90时，既手机翻转，alpha、gamma会瞬间 +-180；&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;欧拉角可参考这本书：&lt;a href=&quot;http://book.douban.com/subject/1400419/&quot;&gt;3D数学基础:图形与游戏开发 第十章&lt;/a&gt;&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;代码实现：&lt;/h2&gt;
+&lt;p&gt;前面全是介绍概念，接下来才是正题。相信我，真正的代码远没有你想象中复杂。&lt;/p&gt;
+&lt;p&gt;现在我们已知了限制性欧拉角三个方位：alpha、beta、gamma，接下来的工作就是转换成矩阵，提供给你所使用的图像API。&lt;/p&gt;
+&lt;p&gt;我们使用 CSS3 rotate3d，来操作一个已建模的正立方体，关于如何使用DIV+ Perspective3d 来构建一个3D立方体，又是另外一个话题了，但其实也很简单。大家可以看上面汽车Demo的样式。相关内容会在下期“伪3D”专题中说明&lt;/p&gt;
+&lt;p&gt;alpha、beta、gamma 一一对应 rotateZ()、rotateX()、rotateY()，相对于我们的Z轴向上的世界坐标系而言。&lt;/p&gt;
+&lt;p&gt;所以欧拉角方位最终的矩阵变换公式是：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://w3c.github.io/deviceorientation/equation13a.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;使用CSS3就意味着不用关心矩阵，除非你想用 matrix3d()。但矩阵相乘是顺序相关的，所以你必须关注每个变换的顺序。代码超简单就是这样.....&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;style.webkitTransform = [&lt;span class=&quot;hljs-string&quot;&gt;&apos;rotateZ(Zdeg) &apos;&lt;/span&gt;,&lt;span class=&quot;hljs-string&quot;&gt;&apos;rotateX(Xdeg) &apos;&lt;/span&gt;,&lt;span class=&quot;hljs-string&quot;&gt;&apos;rotateY(Ydeg)&apos;&lt;/span&gt;].&lt;span class=&quot;hljs-keyword&quot;&gt;join&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;&apos;&lt;/span&gt;);
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;最终的效果应该是，你所看的立方体相对于环境，位置是不变的。&lt;/p&gt;
+&lt;p&gt;发现不对？呵呵，没错，因为陀螺仪返回的是手机相对于世界坐标系的方位。&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;相对屏幕坐标系的逆矩阵&lt;/h4&gt;
+&lt;p&gt;何为虚拟现实，就是你在屏幕中看到的物体，相对于环境是不动的，只是你的摄像机角度变了而已。而图形API所做的变换，都是相对手机屏幕的。下面是一段比较绕的逻辑：&lt;/p&gt;
+&lt;p&gt;陀螺仪的矩阵变换最终是 ZXY 相乘。这是相对世界坐标系，你的手机屏幕按照这个矩阵变换到现在的方位，但是屏幕中的物体，被施加的矩阵变换是相对屏幕坐标系的，为了让它相对于世界坐标系保持不变。所以最终图形API所需要的矩阵变换，是ZXY相反的方向，也就是它的逆矩阵！&lt;/p&gt;
+&lt;p&gt;ZXY将顺序颠倒相乘，YXZ 就能得到相应的逆矩阵。所以！我们最终的代码应该是：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;Style.webkitTransform = [&lt;span class=&quot;hljs-string&quot;&gt;&apos;rotateY(Ydeg) &apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;rotateX(Xdeg) &apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;rotateZ(Zdeg)&apos;&lt;/span&gt;].&lt;span class=&quot;hljs-keyword&quot;&gt;join&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;&apos;&lt;/span&gt;);
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;大功告成！&lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;基于两轴的变换&lt;/h4&gt;
+&lt;p&gt;Android同学可能发现上面的汽车Demo，只能用滑屏操作，因为大部分Android机器的陀螺仪非常不稳定+不精确，抱歉了！&lt;/p&gt;
+&lt;p&gt;手指滑动逻辑也很简单，因为只改变了两个轴的旋转，代码如下：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;style.webkitTransform = &lt;span class=&quot;hljs-string&quot;&gt;&apos;rotateZ(0) rotateX(Xdeg) rotateY(Ydeg)&apos;&lt;/span&gt;&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;注意这里的变换顺序也是不能改的，不然直接影响到你的交互。然后给X轴角度做个+-90°的取值范围就能防止颠倒效果。&lt;/p&gt;
+&lt;h4 id=&quot;-api&quot;&gt;切换不同的图形API&lt;/h4&gt;
+&lt;p&gt;如果你不使用CSS3，那这些矩阵计算都得自己代码实现。我们完全可以使用webGL来渲染整个立方体，除了图形API不同，webGL所需要的变换矩阵完全一致；&lt;/p&gt;
+&lt;p&gt;WebGL是不二的选择，而且可以构建更加复杂的球体来渲染全景，这时候素材就需要一张全景图片。不使用框架的话，会有点复杂，我们采用Three.js来构建我们的webGL版本&lt;/p&gt;
+&lt;p&gt;上代码：&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;新建一个球体 Geometry，使用Threejs.BackSide 内部渲染时，为了消除材质的镜像显示，要设置一个scaleX(-1)，也就是实现左右颠倒&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; geometry = &lt;span class=&quot;hljs-keyword&quot;&gt;new&lt;/span&gt; THREE.SphereGeometry(perspective, &lt;span class=&quot;hljs-number&quot;&gt;100&lt;/span&gt;, &lt;span class=&quot;hljs-number&quot;&gt;100&lt;/span&gt;);
+geometry.applyMatrix( &lt;span class=&quot;hljs-keyword&quot;&gt;new&lt;/span&gt; THREE.Matrix4().makeScale( &lt;span class=&quot;hljs-number&quot;&gt;-1&lt;/span&gt;, &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt; );
+&lt;/code&gt;&lt;/pre&gt;&lt;ul&gt;
+&lt;li&gt;设置全景图素材&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; material = &lt;span class=&quot;hljs-built_in&quot;&gt;new&lt;/span&gt; THREE.MeshBasicMaterial({
+    &lt;span class=&quot;hljs-keyword&quot;&gt;map&lt;/span&gt;: texture,
+    overdraw: &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;,
+    side: THREE.BackSide
+});
+&lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; mesh = &lt;span class=&quot;hljs-built_in&quot;&gt;new&lt;/span&gt; THREE.Mesh(geometry, material);
+&lt;/code&gt;&lt;/pre&gt;&lt;ul&gt;
+&lt;li&gt;箭头deviceorientation事件，构建Euler对象，因为Threejs是左手坐标系，和CSS3坐标系不同，所以Y、Z轴顺序需要颠倒&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code&gt;euler.set( beta * &lt;span class=&quot;hljs-built_in&quot;&gt;Degree&lt;/span&gt;, alpha * &lt;span class=&quot;hljs-built_in&quot;&gt;Degree&lt;/span&gt;, gamma * &lt;span class=&quot;hljs-built_in&quot;&gt;Degree&lt;/span&gt;,&lt;span class=&quot;hljs-string&quot;&gt;&apos;YXZ&apos;&lt;/span&gt; )&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;ul&gt;
+&lt;li&gt;Euler转换为四元数（quaternion）&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code&gt;&lt;span class=&quot;hljs-selector-tag&quot;&gt;camera&lt;/span&gt;&lt;span class=&quot;hljs-selector-class&quot;&gt;.quaternion&lt;/span&gt;&lt;span class=&quot;hljs-selector-class&quot;&gt;.setFromEuler&lt;/span&gt;( &lt;span class=&quot;hljs-selector-tag&quot;&gt;euler&lt;/span&gt; );
+&lt;/code&gt;&lt;/pre&gt;&lt;ul&gt;
+&lt;li&gt;Three.js Demo, 滑轮/双指缩放可以更改摄像机FV&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;a href=&quot;http://g.alicdn.com/tmapp/vr-car/1.1.1/demo/webgl.html&quot;&gt;http://g.alicdn.com/tmapp/vr-car/1.1.1/demo/webgl.html&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms03.alicdn.com/tps/i3/TB1xJOwHpXXXXbqapXXZ6GBKFXX-150-150.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;陀螺仪的其他应用&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;指南针：需要计算真实世界里手机头部的向量坐标，无需逆矩阵，ZXY即可，然后计算这个向量在水平面上的投影坐标；&lt;/li&gt;
+&lt;li&gt;游戏操控：&lt;ul&gt;
+&lt;li&gt;根据 欧拉角 来计算游戏中摄像机的角度变换，应用场景广泛；&lt;/li&gt;
+&lt;li&gt;根据 设备方位 + socket即时通信，实现无线鼠标的效果；&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;虚拟重力：类似指南针原理，计算手机底部的向量坐标。可以结合物理引擎来做一些重力游戏；&lt;/li&gt;
+&lt;li&gt;方位手势：用户可获得左右翻转、上下翻转的手势体验；&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;-&quot;&gt;总结&lt;/h2&gt;
+&lt;p&gt;以上就是基于手机陀螺仪的虚拟现实原理。我数学功底不扎实，很多描述不是很详细，如果你还是不太理解，欢迎随时来讨论。&lt;/p&gt;
+&lt;p&gt;前端工程师作为一个产品中人机交互的第一道门槛，创造性的交互方式、富有画面感的效果，能起对产品起到很积极的作用。个人认为掌握前沿的图形显示技术，对产品体验、技能提升都有很大帮助的。&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[react-native 与 react-web 的融合]]></title><link>http://acyort.github.io/posts/2015/04/69724348.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/04/69724348.html</guid><dc:creator><![CDATA[6174]]></dc:creator><pubDate>Mon, 12 Oct 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;h2 id=&quot;-&quot;&gt;关于&lt;/h2&gt;
+&lt;p&gt;对于react-native在实际中的应用， facebook官方的说法是react-native是为多平台提供共同的开发方式，而不是说一份代码，多处使用。 然后一份代码能够多处使用还是很有意义的，我所了解到的已经在尝试做这件事情的：&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;a href=&quot;https://medium.com/@jviereck/modularise-css-the-react-way-1e817b317b04&quot;&gt;modularise-css-the-react-way&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/js-next/react-style&quot;&gt;react-style&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/raphamorim/native-css&quot;&gt;native-css&lt;/a&gt;  &lt;/li&gt;
+&lt;/ol&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;现阶段大家都是在摸索中，且react-native 还不够成熟，为此我也想通过一个实际的例子提前探究一下共享代码的可行性。 &lt;/p&gt;
+&lt;p&gt;下面是我以SampleApp做的一个简单demo， 先奉献上截图：&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt; &lt;strong&gt;web 版本&lt;/strong&gt;
+&lt;img src=&quot;http://gtms02.alicdn.com/tps/i2/TB1KhiiHFXXXXbBXpXXhV2lQVXX-512-743.png&quot; alt=&quot;&quot;&gt;
+ &lt;strong&gt;react-native版本&lt;/strong&gt;
+&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1Fxx6HFXXXXXdXVXX66HwTVXX-487-801.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2 id=&quot;-&quot;&gt;初步想法&lt;/h2&gt;
+&lt;h3 id=&quot;-&quot;&gt;组件&lt;/h3&gt;
+&lt;p&gt;react-native基本上是View套上Text这样来布局，为了做web和native的兼容，我们得提供继承版本的View ，针对不同的平台返回不同做兼容，我们将提供：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Share.View -&amp;gt; View  (reac-native = View , web = div)&lt;/li&gt;
+&lt;li&gt;Share.P + Share.Span -&amp;gt; Text (Text在react-native中分为块级别和inline级别所以得用两个元素来区分)&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id=&quot;-&quot;&gt;样式&lt;/h3&gt;
+&lt;p&gt;我们知道react-native的样式是css很小的一个子集，大概支持50种属性，为了做到web和native使用同样地样式，那么我的想法是：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;使用css文件来编写样式，通过编译的方式生产不同平台需要的样式&lt;/li&gt;
+&lt;li&gt;对于web，使用auto-prefixel处理，生产web兼容的css代码&lt;/li&gt;
+&lt;li&gt;对于react-native，生成对应的styles.js&lt;/li&gt;
+&lt;li&gt;css的写法用OOCSS的方式&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;这样做的另外一个原因是，因为css是全集，react-native是子集，全集到子集可以通过删减来处理，但是如果想通过子集到全集就会很麻烦（react-style就是通过react-native来生成css）。 且这样做还有很多好处，例如我们可以支持react-native里边不支持的css写法，例如&lt;code&gt;padding: a b c d;&lt;/code&gt; 这种写法很容易得到兼容。&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;其实这里，无论react-native还是react-web都支持&lt;code&gt;style={}&lt;/code&gt;这样的写法. 上面例子中的web截图其实是没有引用css的，但inline样式对于web来说并不是优选。 后面也做了通过react-native的css到web的css的尝试， 那种方案在样式上可以完全基于react-native来写，直接兼容web。&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2 id=&quot;-&quot;&gt;实现思路&lt;/h2&gt;
+&lt;p&gt;首先大概整理一下我们需要解决的问题：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;如何区分web和native&lt;/li&gt;
+&lt;li&gt;js如何对应不同的平台来编译，因为react-native使用的是自己的依赖管理packager&lt;/li&gt;
+&lt;li&gt;css如何编译为js&lt;/li&gt;
+&lt;li&gt;代码结构应该是怎样的&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id=&quot;-web-native&quot;&gt;问题一 ： 如何区分web和native&lt;/h3&gt;
+&lt;p&gt;react-native 里边会有window变量吗？我试了一下，是有的，那window变量里边不可能有location，document之类的吧， 借着这种想法，可用如下方法来区分native和web&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; isNative = !&lt;span class=&quot;hljs-built_in&quot;&gt;window&lt;/span&gt;.location;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3 id=&quot;-&quot;&gt;问题二：如何对应不同平台打包&lt;/h3&gt;
+&lt;p&gt;对于react-native，是通过packager来打包的，具体的实现和逻辑可以随时查看packager的readme文档。 那我们怎么将适用于native的代码打包成web的代码，首先想到的是&lt;code&gt;browserify&lt;/code&gt;, &lt;code&gt;webpack&lt;/code&gt;。 都是遵循commonJs规范，个人更喜欢前者， 用它来应该足以满足需求。  &lt;/p&gt;
+&lt;h3 id=&quot;-css-js&quot;&gt;问题三： css如何编译为js&lt;/h3&gt;
+&lt;p&gt;前面提到了&lt;code&gt;native-css&lt;/code&gt; , 可以用它来帮助我们完成打包。 &lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;问题四：代码结构应该是怎样的&lt;/h3&gt;
+&lt;p&gt;web和native的代码都写在同一个地方，如何做区分呢？ 这个问题当然最好就是不做区分，或者就像女生的衣服，期望是越少越好，但永远不可能木有（猥琐了：-】）。  &lt;/p&gt;
+&lt;p&gt;我设想中的一个最简模型的目录结构，web和ios有不同的入口，web和ios有单独的目录， 组件共享， 如下：&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;├── compo&lt;span class=&quot;hljs-selector-class&quot;&gt;.js&lt;/span&gt;            &lt;span class=&quot;hljs-comment&quot;&gt;// 我们会使用到得公共组件&lt;/span&gt;
+├── styles&lt;span class=&quot;hljs-selector-class&quot;&gt;.css&lt;/span&gt;          &lt;span class=&quot;hljs-comment&quot;&gt;// compo的样式文件&lt;/span&gt;
+├── index&lt;span class=&quot;hljs-selector-class&quot;&gt;.web&lt;/span&gt;&lt;span class=&quot;hljs-selector-class&quot;&gt;.js&lt;/span&gt;        &lt;span class=&quot;hljs-comment&quot;&gt;// web 入口&lt;/span&gt;
+├── index&lt;span class=&quot;hljs-selector-class&quot;&gt;.ios&lt;/span&gt;&lt;span class=&quot;hljs-selector-class&quot;&gt;.js&lt;/span&gt;        &lt;span class=&quot;hljs-comment&quot;&gt;// ios 入口&lt;/span&gt;
+├── shared&lt;span class=&quot;hljs-selector-class&quot;&gt;.js&lt;/span&gt;           &lt;span class=&quot;hljs-comment&quot;&gt;// 做兼容的共享变量文件&lt;/span&gt;
+├── ios                 &lt;span class=&quot;hljs-comment&quot;&gt;// ios 目录&lt;/span&gt;
+└── web                 &lt;span class=&quot;hljs-comment&quot;&gt;// web 目录&lt;/span&gt;
+    ├── index&lt;span class=&quot;hljs-selector-class&quot;&gt;.html&lt;/span&gt;      &lt;span class=&quot;hljs-comment&quot;&gt;// web 页面&lt;/span&gt;
+    ├── index&lt;span class=&quot;hljs-selector-class&quot;&gt;.web&lt;/span&gt;&lt;span class=&quot;hljs-selector-class&quot;&gt;.js&lt;/span&gt;    &lt;span class=&quot;hljs-comment&quot;&gt;// 打包过后的js&lt;/span&gt;
+    └── react&lt;span class=&quot;hljs-selector-class&quot;&gt;.js&lt;/span&gt;        &lt;span class=&quot;hljs-comment&quot;&gt;// react.js依赖&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;好像很复杂的样子， 其实相对于原本的SampleApp，只是多了&lt;code&gt;index.web.js&lt;/code&gt; , &lt;code&gt;web目录&lt;/code&gt;, &lt;code&gt;shared&lt;/code&gt;三者。 然后style通过style.css来描述。 &lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;具体实现&lt;/h2&gt;
+&lt;p&gt;我们已经整理了具体的实现思路，下面是我就会直接吐出我的实现代码， 重点的地方都会在源码里边有注释 &lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;先看应用代码：&lt;/h4&gt;
+&lt;p&gt;&lt;strong&gt;ios入口：index.ios.js&lt;/strong&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;    &lt;span class=&quot;hljs-comment&quot;&gt;/**
+     * Sample React Native App
+     * https://github.com/facebook/react-native
+     */&lt;/span&gt;
+&lt;span class=&quot;hljs-meta&quot;&gt;    &apos;use strict&apos;&lt;/span&gt;;
+    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; React = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;react-native&apos;&lt;/span&gt;);
+    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; Compo = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./compo&apos;&lt;/span&gt;);
+    React.AppRegistry.registerComponent(&lt;span class=&quot;hljs-string&quot;&gt;&apos;ShareCodeProject&apos;&lt;/span&gt;, () =&amp;gt;  Compo);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;strong&gt;web入口：index.web.js&lt;/strong&gt; &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;    &lt;span class=&quot;hljs-comment&quot;&gt;/**
+     * for web
+     */&lt;/span&gt;
+    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; Compo = &lt;span class=&quot;hljs-built_in&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./compo&apos;&lt;/span&gt;);
+    React.render(&amp;lt;Compo /&amp;gt;, &lt;span class=&quot;hljs-built_in&quot;&gt;document&lt;/span&gt;.getElementById(&lt;span class=&quot;hljs-string&quot;&gt;&apos;App&apos;&lt;/span&gt;));
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;strong&gt;样例组件：compo.js&lt;/strong&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;    &lt;span class=&quot;hljs-comment&quot;&gt;// 依赖的公共库，通过它获取兼容的组件&lt;/span&gt;
+    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; Share = &lt;span class=&quot;hljs-keyword&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./shared&apos;&lt;/span&gt;);
+    &lt;span class=&quot;hljs-comment&quot;&gt;// styles是style.css build过后生成的style.js&lt;/span&gt;
+    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; styles = &lt;span class=&quot;hljs-keyword&quot;&gt;require&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./styles&apos;&lt;/span&gt;);
+    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; React = Share.React;
+    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; {
+      View,
+      P,
+      Span
+    } = Share;
+
+    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; Compo = React.createClass({
+      render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt; &lt;/span&gt;{
+        &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; (
+          &amp;lt;View style={styles.container}&amp;gt;
+            &amp;lt;P style={styles.welcome}&amp;gt;
+              Welcome to React Native!
+            &amp;lt;/P&amp;gt;
+            &amp;lt;P style={styles.instructions}&amp;gt;
+              To get started, edit index.ios.js
+            &amp;lt;/P&amp;gt;
+            &amp;lt;P style={styles.instructions}&amp;gt;
+              Press Cmd+R to reload,{&lt;span class=&quot;hljs-string&quot;&gt;&apos;\n&apos;&lt;/span&gt;}
+              Cmd+Control+Z &lt;span class=&quot;hljs-keyword&quot;&gt;for&lt;/span&gt; dev menu
+            &amp;lt;/P&amp;gt;
+          &amp;lt;/View&amp;gt;
+        );
+      }
+    });
+
+    module.exports = Compo;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;strong&gt;组件样式: style.css&lt;/strong&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-css&quot;&gt;    &lt;span class=&quot;hljs-comment&quot;&gt;/**
+     * 大家可能发现了css的写法还是小驼峰，是的不是横杠，暂时我们还是以这种方式处理
+     * native-css 目测不支持横杠，（自己重写native-css相对来说是比较容易的，完全可以做到css兼容到react-native的css子集）
+     */&lt;/span&gt;
+    &lt;span class=&quot;hljs-selector-class&quot;&gt;.container&lt;/span&gt; {
+        &lt;span class=&quot;hljs-attribute&quot;&gt;flex&lt;/span&gt;: &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;justifyContent&lt;/span&gt;: center;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;alignItems&lt;/span&gt;: center;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;backgroundColor&lt;/span&gt;: &lt;span class=&quot;hljs-number&quot;&gt;#F5FCFF&lt;/span&gt;;
+    }
+
+    &lt;span class=&quot;hljs-selector-class&quot;&gt;.welcome&lt;/span&gt; {
+        &lt;span class=&quot;hljs-attribute&quot;&gt;fontSize&lt;/span&gt;: &lt;span class=&quot;hljs-number&quot;&gt;20&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;textAlign&lt;/span&gt;: center;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;margin&lt;/span&gt;: &lt;span class=&quot;hljs-number&quot;&gt;10&lt;/span&gt;;
+    }
+
+    &lt;span class=&quot;hljs-selector-class&quot;&gt;.instructions&lt;/span&gt; {
+        &lt;span class=&quot;hljs-attribute&quot;&gt;textAlign&lt;/span&gt;: center;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;color&lt;/span&gt;: &lt;span class=&quot;hljs-number&quot;&gt;#333333&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;marginBottom&lt;/span&gt;: &lt;span class=&quot;hljs-number&quot;&gt;5&lt;/span&gt;;
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;strong&gt;index.html&lt;/strong&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-html&quot;&gt;    &lt;span class=&quot;hljs-meta&quot;&gt;&amp;lt;!DOCTYPE html&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;html&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;head&lt;/span&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;title&lt;/span&gt;&amp;gt;&lt;/span&gt;Hello React!&lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;title&lt;/span&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;script&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;src&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;&quot;./react.js&quot;&lt;/span&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;undefined&quot;&gt;&lt;/span&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;script&lt;/span&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-comment&quot;&gt;&amp;lt;!-- No need for JSXTransformer! --&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;head&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;body&lt;/span&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;div&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;id&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;&quot;App&quot;&lt;/span&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;div&lt;/span&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;script&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;src&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;&quot;./index.web.js&quot;&lt;/span&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;undefined&quot;&gt;&lt;/span&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;script&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;body&lt;/span&gt;&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;html&lt;/span&gt;&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h4 id=&quot;share-&quot;&gt;Share部分的处理&lt;/h4&gt;
+&lt;p&gt;&lt;strong&gt;shared.js&lt;/strong&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; Share = {};
+    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; React = require(&lt;span class=&quot;hljs-string&quot;&gt;&apos;react-native&apos;&lt;/span&gt;);
+    &lt;span class=&quot;hljs-keyword&quot;&gt;var&lt;/span&gt; isNative = !window.location;
+    &lt;span class=&quot;hljs-comment&quot;&gt;/**
+     * 判断是web的时候，重新赋值React
+     */&lt;/span&gt;
+    &lt;span class=&quot;hljs-keyword&quot;&gt;if&lt;/span&gt; (window.React) {
+        React = window.React;
+    } 
+    Share.React = React;
+
+    &lt;span class=&quot;hljs-comment&quot;&gt;/**
+     * 做底层的兼容， 当然这里只是做了一个最简demo，具体实现的时候可能会对props做各种兼容处理
+     */&lt;/span&gt;
+    &lt;span class=&quot;hljs-keyword&quot;&gt;if&lt;/span&gt; (!isNative) {
+
+        Share.View = React.createClass({
+            render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt; &lt;/span&gt;{
+                &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; &amp;lt;div {...&lt;span class=&quot;hljs-keyword&quot;&gt;this&lt;/span&gt;.props}/&amp;gt;
+            }
+        });
+
+        Share.P = React.createClass({
+            render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt; &lt;/span&gt;{
+                &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; &amp;lt;p {...&lt;span class=&quot;hljs-keyword&quot;&gt;this&lt;/span&gt;.props}/&amp;gt;
+            }
+        });
+
+        Share.Span = React.createClass({
+            render: &lt;span class=&quot;hljs-function&quot;&gt;&lt;span class=&quot;hljs-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hljs-params&quot;&gt;()&lt;/span&gt; &lt;/span&gt;{
+                &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; &amp;lt;span {...&lt;span class=&quot;hljs-keyword&quot;&gt;this&lt;/span&gt;.props}/&amp;gt;
+            }
+        });
+    } &lt;span class=&quot;hljs-keyword&quot;&gt;else&lt;/span&gt; {
+        &lt;span class=&quot;hljs-comment&quot;&gt;// alert(&apos;isNative&apos;)&lt;/span&gt;
+        Share.View = React.View;
+        Share.P = React.Text;
+        Share.Span = React.Text;
+        Share.Text = React.Text;
+    }
+
+    module.exports = Share;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h4 id=&quot;build-&quot;&gt;build打包程序&lt;/h4&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;    var fs = require(&lt;span class=&quot;hljs-string&quot;&gt;&apos;fs&apos;&lt;/span&gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+    var nativeCSS = require(&lt;span class=&quot;hljs-string&quot;&gt;&apos;native-css&apos;&lt;/span&gt;),
+    var cssObject = nativeCSS.convert(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./styles.css&apos;&lt;/span&gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+
+    toStyleJs(cssObject, &lt;span class=&quot;hljs-string&quot;&gt;&apos;./styles.js&apos;&lt;/span&gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+    buildWebReact()&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;hljs-comment&quot;&gt;/**
+     * native-css获取到得是一个对象，需要将cssObject转化为js代码
+     */&lt;/span&gt;
+    function toStyleJs(cssObject, name) {
+        console.log(&lt;span class=&quot;hljs-string&quot;&gt;&apos;build styles.js \n&apos;&lt;/span&gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+        var tab = &lt;span class=&quot;hljs-string&quot;&gt;&apos;    &apos;&lt;/span&gt;&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+        var &lt;span class=&quot;hljs-keyword&quot;&gt;str&lt;/span&gt; = &lt;span class=&quot;hljs-string&quot;&gt;&apos;&apos;&lt;/span&gt;&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+
+        &lt;span class=&quot;hljs-keyword&quot;&gt;str&lt;/span&gt; += &lt;span class=&quot;hljs-string&quot;&gt;&apos;/* build header */\n&apos;&lt;/span&gt;&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+        &lt;span class=&quot;hljs-keyword&quot;&gt;str&lt;/span&gt; += &lt;span class=&quot;hljs-string&quot;&gt;&apos;var styles = {\n&apos;&lt;/span&gt;&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+
+        &lt;span class=&quot;hljs-keyword&quot;&gt;for&lt;/span&gt;(var key in cssObject) {
+            var rules = cssObject[key]&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+            &lt;span class=&quot;hljs-keyword&quot;&gt;str&lt;/span&gt; += tab + key + &lt;span class=&quot;hljs-string&quot;&gt;&apos;: {\n&apos;&lt;/span&gt;&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+            &lt;span class=&quot;hljs-keyword&quot;&gt;for&lt;/span&gt;(var attr in rules) {
+                var rule = rules[attr]&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+                &lt;span class=&quot;hljs-keyword&quot;&gt;str&lt;/span&gt; += tab + tab + attr + &lt;span class=&quot;hljs-string&quot;&gt;&apos;: &apos;&lt;/span&gt; + format(rule) + &lt;span class=&quot;hljs-string&quot;&gt;&apos;,\n&apos;&lt;/span&gt;
+            }
+            &lt;span class=&quot;hljs-keyword&quot;&gt;str&lt;/span&gt; += tab + &lt;span class=&quot;hljs-string&quot;&gt;&apos;},\n&apos;&lt;/span&gt; 
+        }
+
+        &lt;span class=&quot;hljs-keyword&quot;&gt;str&lt;/span&gt; += &lt;span class=&quot;hljs-string&quot;&gt;&apos;};\n&apos;&lt;/span&gt;
+        &lt;span class=&quot;hljs-keyword&quot;&gt;str&lt;/span&gt; += &lt;span class=&quot;hljs-string&quot;&gt;&apos;module.exports = styles;\n&apos;&lt;/span&gt;
+
+        fs.writeFile(name, &lt;span class=&quot;hljs-keyword&quot;&gt;str&lt;/span&gt;)
+        function format(rule) {
+            &lt;span class=&quot;hljs-keyword&quot;&gt;if&lt;/span&gt; (!isNaN(rule - &lt;span class=&quot;hljs-number&quot;&gt;0&lt;/span&gt;)) {
+                &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; rule&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+            }
+            &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;&quot;&apos;&lt;/span&gt; + rule + &lt;span class=&quot;hljs-string&quot;&gt;&apos;&quot;&apos;&lt;/span&gt;&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+        }
+    }
+
+    &lt;span class=&quot;hljs-comment&quot;&gt;/**
+     * 构造web使用的react
+     */&lt;/span&gt;
+    function buildWebReact() {
+        console.log(&lt;span class=&quot;hljs-string&quot;&gt;&apos;build web bundle&apos;&lt;/span&gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+        var browserify = require(&lt;span class=&quot;hljs-string&quot;&gt;&apos;browserify&apos;&lt;/span&gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+        var b = browserify()&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+        b.add(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./index.web.js&apos;&lt;/span&gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+
+        &lt;span class=&quot;hljs-comment&quot;&gt;// 添加es6支持&lt;/span&gt;
+        b.transform(&lt;span class=&quot;hljs-string&quot;&gt;&apos;reactify&apos;&lt;/span&gt;, {&lt;span class=&quot;hljs-string&quot;&gt;&apos;es6&apos;&lt;/span&gt;: true})&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+
+        &lt;span class=&quot;hljs-comment&quot;&gt;// ignore掉react-native &lt;/span&gt;
+        b.ignore(&lt;span class=&quot;hljs-string&quot;&gt;&apos;react-native&apos;&lt;/span&gt;)
+        var wstream = fs.createWriteStream(&lt;span class=&quot;hljs-string&quot;&gt;&apos;./web/index.web.js&apos;&lt;/span&gt;)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+        b.bundle().pipe(wstream)&lt;span class=&quot;hljs-comment&quot;&gt;;&lt;/span&gt;
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2 id=&quot;-react-native-react-web-&quot;&gt;也尝试一下由react-native 到react-web的兼容方案&lt;/h2&gt;
+&lt;h3 id=&quot;-&quot;&gt;问题&lt;/h3&gt;
+&lt;ol&gt;
+&lt;li&gt;flexbox的写法在react-native上面我们会发现， 不用在父元素上声明&lt;code&gt;display: flex;&lt;/code&gt; 在web上必须要做这样的声明， 所以我们需要让设置了&lt;code&gt;flex:*&lt;/code&gt;的元素的父元素&lt;code&gt;display: flex;&lt;/code&gt; 。&lt;/li&gt;
+&lt;li&gt;flexbox在android上是由很多bug的，所以必须要解决兼容性问题&lt;code&gt;webkit-box&lt;/code&gt;  &lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id=&quot;-&quot;&gt;解决方案&lt;/h3&gt;
+&lt;h3 id=&quot;1-nested-style-&quot;&gt;1. nested 的style写法&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;    styles = StyleSheet.create({
+        mod: {
+            flexDirection: &lt;span class=&quot;hljs-string&quot;&gt;&apos;row&apos;&lt;/span&gt;,
+            item: {
+                flex: &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;
+            }
+        }
+    });
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;这样的写法有些像less，我们可以知道元素的层级关系， 这样我可以遍历这个对象，查找子元素有设置flex的，父元素加上&lt;code&gt;display:flexbox&lt;/code&gt;。 &lt;/p&gt;
+&lt;h3 id=&quot;2-&quot;&gt;2. 通过自定义元素&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt; var GridSystem = require(&lt;span class=&quot;hljs-string&quot;&gt;&apos;GridSystem&apos;&lt;/span&gt;);
+ var {
+    Row,
+    Grid,
+    Grid6,
+    Grid4
+ } = GridSystem;
+ &amp;lt;&lt;span class=&quot;hljs-keyword&quot;&gt;Row&lt;/span&gt; ...&amp;gt;
+    &amp;lt;&lt;span class=&quot;hljs-keyword&quot;&gt;Grid&lt;/span&gt;/&amp;gt;
+    &amp;lt;&lt;span class=&quot;hljs-keyword&quot;&gt;Grid&lt;/span&gt;/&amp;gt;
+ &amp;lt;/&lt;span class=&quot;hljs-keyword&quot;&gt;Row&lt;/span&gt;&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;通过标签的方式， 相当于给react-native或者react添加了一个网格系统，同时我们可以直接在Row上设置&lt;code&gt;display:flex&lt;/code&gt;.&lt;/p&gt;
+&lt;h3 id=&quot;3-&quot;&gt;3. 遍历查找&lt;/h3&gt;
+&lt;p&gt;完全同react-native原生的写法，直接在web中兼容，遍历所有有flex样式的节点，直接做兼容。&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;    componentDidMount: function() {
+        var $&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt; &lt;span class=&quot;hljs-title&quot;&gt;= this&lt;/span&gt;.getDOMNode();
+        var $parent = $&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;parentNode&lt;/span&gt;;
+        var $docfrag = document.createDocumentFragment();
+        $docfrag.appendChild($&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;hljs-title&quot;&gt;);
+
+        var&lt;/span&gt; treeWalker = document.createTreeWalker($&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;hljs-title&quot;&gt;, NodeFilter&lt;/span&gt;.SHOW_ELEMENT, { 
+            acceptNode: function(&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;hljs-title&quot;&gt;) { 
+                return&lt;/span&gt; NodeFilter.FILTER_ACCEPT; 
+            } 
+        }, &lt;span class=&quot;hljs-literal&quot;&gt;false&lt;/span&gt;);
+
+        while(treeWalker.nextNode()) {
+            var &lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt; &lt;span class=&quot;hljs-title&quot;&gt;= treeWalker&lt;/span&gt;.currentNode;
+            if (&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;style&lt;/span&gt;.flex) {
+                flexChild(&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;hljs-title&quot;&gt;);
+                flexParent&lt;/span&gt;(&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;parentNode&lt;/span&gt;);
+            }
+        };
+
+        $parent.appendChild($docfrag);
+    }
+
+    function flexChild(&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;hljs-title&quot;&gt;) {
+        if&lt;/span&gt; (&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;__flexchild__&lt;/span&gt;) {
+            return;
+        }
+        &lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;__flexchild__&lt;/span&gt; = &lt;span class=&quot;hljs-literal&quot;&gt;true&lt;/span&gt;;
+        var flexGrow = &lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;style&lt;/span&gt;.flexGrow;
+        addStyle(&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;hljs-title&quot;&gt;, `
+            -webkit-box-flex&lt;/span&gt;: ${flexGrow};
+            -webkit-flex: ${flexGrow};
+            -ms-flex: ${flexGrow};
+            flex: ${flexGrow};
+        `);
+        &lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;classList&lt;/span&gt;.add(&apos;mui-flex-cell&apos;);
+    }
+
+    function flexParent(&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;hljs-title&quot;&gt;) {
+        if&lt;/span&gt; (&lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;__flexparentd__&lt;/span&gt;) {
+            return;
+        }
+        &lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;__flexparentd__&lt;/span&gt; = &lt;span class=&quot;hljs-literal&quot;&gt;true&lt;/span&gt;;
+        &lt;span class=&quot;hljs-keyword&quot;&gt;node&lt;/span&gt;.&lt;span class=&quot;hljs-title&quot;&gt;classList&lt;/span&gt;.add(&apos;mui-flex&apos;);
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-css&quot;&gt;    &lt;span class=&quot;hljs-selector-class&quot;&gt;.mui-flex&lt;/span&gt; {
+        &lt;span class=&quot;hljs-attribute&quot;&gt;display&lt;/span&gt;: -webkit-box&lt;span class=&quot;hljs-meta&quot;&gt;!important&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;display&lt;/span&gt;: -webkit-flex&lt;span class=&quot;hljs-meta&quot;&gt;!important&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;display&lt;/span&gt;: -ms-flexbox&lt;span class=&quot;hljs-meta&quot;&gt;!important&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;display&lt;/span&gt;: flex&lt;span class=&quot;hljs-meta&quot;&gt;!important&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;-webkit-flex-wrap&lt;/span&gt;: wrap;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;-ms-flex-wrap&lt;/span&gt;: wrap;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;flex-wrap&lt;/span&gt;: wrap;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;-webkit-box-orient&lt;/span&gt;: vertical;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;-webkit-box-direction&lt;/span&gt;: normal;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;-webkit-flex-direction&lt;/span&gt;: column;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;-ms-flex-direction&lt;/span&gt;: column;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;flex-direction&lt;/span&gt;: column;
+    }
+
+    &lt;span class=&quot;hljs-selector-class&quot;&gt;.mui-flex-cell&lt;/span&gt; {
+        &lt;span class=&quot;hljs-attribute&quot;&gt;-webkit-flex-basis&lt;/span&gt;: &lt;span class=&quot;hljs-number&quot;&gt;0&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;-ms-flex-preferred-size&lt;/span&gt;: &lt;span class=&quot;hljs-number&quot;&gt;0&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;flex-basis&lt;/span&gt;: &lt;span class=&quot;hljs-number&quot;&gt;0&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;max-width&lt;/span&gt;: &lt;span class=&quot;hljs-number&quot;&gt;100%&lt;/span&gt;;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;display&lt;/span&gt;: block;
+        &lt;span class=&quot;hljs-attribute&quot;&gt;position&lt;/span&gt;: relative;
+    }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2 id=&quot;-&quot;&gt;总结&lt;/h2&gt;
+&lt;p&gt;这个demo很简单，实际应用中应该会有很多地方的坑， 比如：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;模块中依赖只有native才有的组件&lt;/li&gt;
+&lt;li&gt;Native模块的事件处理和web大不相同 &lt;/li&gt;
+&lt;li&gt;现实环境中的模块更多，更复杂，如何做模块的管理&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;对于&lt;code&gt;write once, run anywhere&lt;/code&gt; 这个观点.  相信不同的人会有不同的看法，但无论如何，如果兼容成本不大，这样的兼容技术方案对业务开发是有极大意义的。&lt;/p&gt;
+&lt;p&gt;ps0: 这里仅仅做可行性方案的分析，不代表我认同或不认同这种方案。
+ps1: 大家如果有更好的方案，求教，求讨论。&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[react-native 之布局篇]]></title><link>http://acyort.github.io/posts/2015/04/67484630.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/04/67484630.html</guid><dc:creator><![CDATA[6174]]></dc:creator><pubDate>Tue, 12 Jan 2016 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;h2 id=&quot;-&quot;&gt;宽度单位和像素密度&lt;/h2&gt;
+&lt;p&gt;react的宽度不支持百分比，设置宽度时不需要带单位 &lt;code&gt;{width: 10}&lt;/code&gt;， 那么10代表的具体宽度是多少呢？  &lt;/p&gt;
+&lt;p&gt;不知道是官网文档不全还是我眼瞎，反正是没找到，那做一个实验自己找吧：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;    var Dimensions = require(&lt;span class=&quot;hljs-string&quot;&gt;&apos;Dimensions&apos;&lt;/span&gt;);
+    &amp;lt;Text style={styles.welcome}&amp;gt;
+          window.&lt;span class=&quot;hljs-built_in&quot;&gt;width&lt;/span&gt;={Dimensions.&lt;span class=&quot;hljs-built_in&quot;&gt;get&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;window&apos;&lt;/span&gt;).&lt;span class=&quot;hljs-built_in&quot;&gt;width&lt;/span&gt; + &lt;span class=&quot;hljs-string&quot;&gt;&apos;\n&apos;&lt;/span&gt;} 
+          window.&lt;span class=&quot;hljs-built_in&quot;&gt;height&lt;/span&gt;={Dimensions.&lt;span class=&quot;hljs-built_in&quot;&gt;get&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;window&apos;&lt;/span&gt;).&lt;span class=&quot;hljs-built_in&quot;&gt;height&lt;/span&gt; + &lt;span class=&quot;hljs-string&quot;&gt;&apos;\n&apos;&lt;/span&gt;} 
+          pxielRatio={PixelRatio.&lt;span class=&quot;hljs-built_in&quot;&gt;get&lt;/span&gt;()}
+    &amp;lt;/Text&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;默认用的是iphone6的模拟器结果是：&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;    window.&lt;span class=&quot;hljs-attr&quot;&gt;width=375&lt;/span&gt;
+    window.&lt;span class=&quot;hljs-attr&quot;&gt;height=667&lt;/span&gt;
+    &lt;span class=&quot;hljs-attr&quot;&gt;pxielRatio=2&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;我们知道iphone系列的尺寸如下图：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1tOgMHpXXXXaIXFXXWb19GXXX-911-563.jpg&quot; alt=&quot;iphones&quot;&gt; &lt;/p&gt;
+&lt;p&gt;可以看到iphone 6的宽度为 375pt，对应了上边的375，由此可见react的单位为pt。 那如何获取实际的像素尺寸呢？ 这对图片的高清化很重要，如果我的图片大小为100&lt;em&gt;100 px. 设置宽度为100 &lt;/em&gt; 100. 那在iphone上的尺寸就是模糊的。 这个时候需要的图像大小应该是 100 * pixelRatio的大小 。 &lt;/p&gt;
+&lt;p&gt;react 提供了PixelRatio 的获取方式&lt;a href=&quot;https://facebook.github.io/react-native/docs/pixelratio.html&quot;&gt;https://facebook.github.io/react-native/docs/pixelratio.html&lt;/a&gt; &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt; var image = getImage({
+   &lt;span class=&quot;hljs-symbol&quot;&gt;width:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;200&lt;/span&gt; * PixelRatio.get(),
+   &lt;span class=&quot;hljs-symbol&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;100&lt;/span&gt; * PixelRatio.get()
+ });
+ &amp;lt;Image source={image} style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;width:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;200&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;100&lt;/span&gt;}}&lt;/span&gt; /&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2 id=&quot;flex-&quot;&gt;flex的布局&lt;/h2&gt;
+&lt;h3 id=&quot;-&quot;&gt;默认宽度&lt;/h3&gt;
+&lt;p&gt;我们知道一个div如果不设置宽度，默认的会占用100%的宽度， 为了验证100%这个问题， 做三个实验&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;根节点上方一个View， 不设置宽度&lt;/li&gt;
+&lt;li&gt;固定宽度的元素上设置一个View， 不设置宽度&lt;/li&gt;
+&lt;li&gt;flex的元素上放一个View宽度， 不设置宽度 &lt;/li&gt;
+&lt;/ol&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-html&quot;&gt; &amp;lt;Text style={[styles.text, styles.header]}&amp;gt;
+      根节点上放一个元素，不设置宽度
+  &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/Text&amp;gt;        
+
+  &amp;lt;View style={{height: 20, backgroundColor: &apos;#333333&apos;}} /&lt;/span&gt;&amp;gt;
+
+  &amp;lt;Text style={[styles.text, styles.header]}&amp;gt;
+      固定宽度的元素上放一个View，不设置宽度
+  &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/Text&amp;gt; 
+
+  &amp;lt;View style={{width: 100}}&amp;gt;
+    &amp;lt;View style={{height: 20, backgroundColor: &apos;#333333&apos;}} /&lt;/span&gt;&amp;gt;
+  &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+
+  &amp;lt;Text style={[styles.text, styles.header]}&amp;gt;
+      flex的元素上放一个View，不设置宽度
+  &amp;lt;/&lt;/span&gt;Text&amp;gt; 
+
+  &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flexDirection:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;row&apos;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+    &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+      &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;20&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;#333333&apos;&lt;/span&gt;}}&lt;/span&gt; /&amp;gt;
+    &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+    &amp;lt;View style={{flex: 1}}/&lt;/span&gt;&amp;gt;
+  &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms01.alicdn.com/tps/i1/TB1KJoMHpXXXXcKXVXXKEpZRFXX-376-206.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;结果可以看到flex的元素如果不设置宽度， 都会百分之百的占满父容器。&lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;水平垂直居中&lt;/h3&gt;
+&lt;p&gt;css 里边经常会做的事情是去讲一个文本或者图片水平垂直居中，如果使用过css 的flexbox当然知道使用&lt;code&gt;alignItems&lt;/code&gt; 和 &lt;code&gt;justifyContent&lt;/code&gt; . 那用react-native也来做一下实验 &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-html&quot;&gt;   &amp;lt;Text style={[styles.text, styles.header]}&amp;gt;
+        水平居中
+    &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/Text&amp;gt;
+
+    &amp;lt;View style={{height: 100, backgroundColor: &apos;#333333&apos;, alignItems: &apos;center&apos;}}&amp;gt;
+      &amp;lt;View style={{backgroundColor: &apos;#fefefe&apos;, width: 30, height: 30, borderRadius: 15}}/&lt;/span&gt;&amp;gt;
+    &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+
+     &amp;lt;Text style={[styles.text, styles.header]}&amp;gt;
+        垂直居中
+    &amp;lt;/&lt;/span&gt;Text&amp;gt;
+    &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;100&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;#333333&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;justifyContent:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;center&apos;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+      &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;#fefefe&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;width:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;30&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;30&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;borderRadius:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;15&lt;/span&gt;}}&lt;/span&gt;/&amp;gt;
+    &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+
+    &amp;lt;Text style={[styles.text, styles.header]}&amp;gt;
+        水平垂直居中
+    &amp;lt;/&lt;/span&gt;Text&amp;gt;
+    &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;100&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;#333333&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;alignItems:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;center&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;justifyContent:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;center&apos;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+      &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;#fefefe&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;width:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;30&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;30&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;borderRadius:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;15&lt;/span&gt;}}&lt;/span&gt;/&amp;gt;
+    &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms01.alicdn.com/tps/i1/TB1lgwPHpXXXXXYXFXXKUUPQVXX-375-440.png&quot; alt=&quot;&quot;&gt;   &lt;/p&gt;
+&lt;h3 id=&quot;-&quot;&gt;网格布局&lt;/h3&gt;
+&lt;p&gt;网格布局实验， 网格布局能够满足绝大多数的日常开发需求，所以只要满足网格布局的spec，那么就可以证明react的flex布局能够满足正常开发需求 &lt;/p&gt;
+&lt;h4 id=&quot;-&quot;&gt;等分的网格&lt;/h4&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms03.alicdn.com/tps/i3/TB1Nf3PHpXXXXXLXpXXex4tPVXX-374-53.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;xml&quot;&gt;    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.flexContainer}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.cell}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.welcome}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+          cell1
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.cell}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.welcome}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+          cell2
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.cell}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.welcome}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+          cell3
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+
+    styles = &lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{
+        flexContainer: {
+            // 容器需要添加direction才能变成让子元素flex
+            flexDirection: &apos;row&apos;
+        }&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;,
+        cell: &lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{
+            flex: 1,
+            height: 50,
+            backgroundColor: &apos;#aaaaaa&apos;
+        }&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;,
+        welcome: &lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{
+            fontSize: 20,
+            textAlign: &apos;center&apos;,
+            margin: 10
+        }&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;,
+    }&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h4 id=&quot;-flex-&quot;&gt;左边固定， 右边固定，中间flex的布局&lt;/h4&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1o03PHpXXXXXQXpXXrEIcPVXX-376-51.png&quot; alt=&quot;&quot;&gt; &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;&lt;span class=&quot;xml&quot;&gt;    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.flexContainer}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.cellfixed}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.welcome}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+          fixed
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.cell}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.welcome}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+          flex
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.cellfixed}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{styles.welcome}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+          fixed
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+
+    styles = &lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{
+        flexContainer: {
+            // 容器需要添加direction才能变成让子元素flex
+            flexDirection: &apos;row&apos;
+        }&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;,
+        cell: &lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{
+            flex: 1,
+            height: 50,
+            backgroundColor: &apos;#aaaaaa&apos;
+        }&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;,
+        welcome: &lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{
+            fontSize: 20,
+            textAlign: &apos;center&apos;,
+            margin: 10
+        }&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;,
+        cellfixed: &lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{
+            height: 50,
+            width: 80,
+            backgroundColor: &apos;#fefefe&apos;
+        }&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt; 
+    }&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h4 id=&quot;-&quot;&gt;嵌套的网格&lt;/h4&gt;
+&lt;p&gt;通常网格不是一层的，布局容器都是一层套一层的， 所以必须验证在&lt;code&gt;real world&lt;/code&gt;下面的网格布局 &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-html&quot;&gt; &amp;lt;Text style={[styles.text, styles.header]}&amp;gt;
+    嵌套的网格
+  &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/Text&amp;gt;
+  &amp;lt;View style={{flexDirection: &apos;row&apos;, height: 200, backgroundColor:&quot;#fefefe&quot;, padding: 20}}&amp;gt;
+    &amp;lt;View style={{flex: 1, flexDirection:&apos;column&apos;, padding: 15, backgroundColor:&quot;#eeeeee&quot;}}&amp;gt;  
+        &amp;lt;View style={{flex: 1, backgroundColor:&quot;#bbaaaa&quot;}}&amp;gt;  
+        &amp;lt;/&lt;/span&gt;View&amp;gt;
+        &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&quot;#aabbaa&quot;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+        &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+    &amp;lt;/&lt;/span&gt;View&amp;gt;
+    &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;padding:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;15&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;flexDirection:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&apos;row&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&quot;#eeeeee&quot;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+        &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&quot;#aaaabb&quot;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;  
+            &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;flexDirection:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&apos;row&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&quot;#eeaaaa&quot;&lt;/span&gt;}}&lt;/span&gt;&amp;gt; 
+               &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&quot;#eebbaa&quot;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;  
+              &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+              &amp;lt;View style={{flex: 1, backgroundColor:&quot;#bbccee&quot;}}&amp;gt;
+              &amp;lt;/&lt;/span&gt;View&amp;gt; 
+            &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+            &amp;lt;View style={{flex: 1, backgroundColor:&quot;#eebbdd&quot;}}&amp;gt;
+            &amp;lt;/&lt;/span&gt;View&amp;gt;
+        &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+        &amp;lt;View style={{flex: 1, backgroundColor:&quot;#aaccaa&quot;}}&amp;gt;
+          &amp;lt;ScrollView style={{flex: 1, backgroundColor:&quot;#bbccdd&quot;, padding: 5}}&amp;gt;
+                &amp;lt;View style={{flexDirection: &apos;row&apos;, height: 50, backgroundColor:&quot;#fefefe&quot;}}&amp;gt;
+                  &amp;lt;View style={{flex: 1, flexDirection:&apos;column&apos;, backgroundColor:&quot;#eeeeee&quot;}}&amp;gt;  
+                      &amp;lt;View style={{flex: 1, backgroundColor:&quot;#bbaaaa&quot;}}&amp;gt;  
+                      &amp;lt;/&lt;/span&gt;View&amp;gt;
+                      &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&quot;#aabbaa&quot;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+                      &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+                  &amp;lt;/&lt;/span&gt;View&amp;gt;
+                  &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;flexDirection:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&apos;row&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&quot;#eeeeee&quot;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+                      &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&quot;#aaaabb&quot;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;  
+                          &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;flexDirection:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&apos;row&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&quot;#eeaaaa&quot;&lt;/span&gt;}}&lt;/span&gt;&amp;gt; 
+                             &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt;&lt;span class=&quot;hljs-string&quot;&gt;&quot;#eebbaa&quot;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;  
+                            &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+                            &amp;lt;View style={{flex: 1, backgroundColor:&quot;#bbccee&quot;}}&amp;gt;
+                            &amp;lt;/&lt;/span&gt;View&amp;gt; 
+                          &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+                          &amp;lt;View style={{flex: 1, backgroundColor:&quot;#eebbdd&quot;}}&amp;gt;
+                          &amp;lt;/&lt;/span&gt;View&amp;gt;
+                      &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+                      &amp;lt;View style={{flex: 1, backgroundColor:&quot;#aaccaa&quot;}}&amp;gt;
+                      &amp;lt;/&lt;/span&gt;View&amp;gt;
+                  &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+                &amp;lt;/&lt;/span&gt;View&amp;gt;
+                &amp;lt;Text style={[styles.text, styles.header, {&lt;span class=&quot;hljs-symbol&quot;&gt;color:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;#ffffff&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;fontSize:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;12&lt;/span&gt;}]}&amp;gt;
+                  {(function(){
+                    var str = &lt;span class=&quot;hljs-string&quot;&gt;&apos;&apos;&lt;/span&gt;;
+                    var n = &lt;span class=&quot;hljs-number&quot;&gt;100&lt;/span&gt;;
+                    &lt;span class=&quot;hljs-keyword&quot;&gt;while&lt;/span&gt;(n--) {
+                      str += &lt;span class=&quot;hljs-string&quot;&gt;&apos;嵌套的网格&apos;&lt;/span&gt; + &lt;span class=&quot;hljs-string&quot;&gt;&apos;\n&apos;&lt;/span&gt;;
+                    }
+                    &lt;span class=&quot;hljs-keyword&quot;&gt;return&lt;/span&gt; str;
+                  })()}
+                &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/Text&amp;gt;
+          &amp;lt;/&lt;/span&gt;ScrollView&amp;gt; 
+        &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+    &amp;lt;/&lt;/span&gt;View&amp;gt;
+  &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms03.alicdn.com/tps/i3/TB1MR7MHpXXXXbbXVXXrypWOFXX-371-229.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;好在没被我玩儿坏，可以看到上图的嵌套关系也是足够的复杂的，（我还加了一个ScrollView，然后再嵌套整个结构）嵌套多层的布局是没有问题的。 &lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;图片布局&lt;/h2&gt;
+&lt;p&gt;首先我们得知道图片有一个stretchMode. 通过Image.resizeMode访问&lt;/p&gt;
+&lt;h3 id=&quot;-mode&quot;&gt;找出有哪些mode&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;  var &lt;span class=&quot;hljs-keyword&quot;&gt;keys&lt;/span&gt; = Object.&lt;span class=&quot;hljs-keyword&quot;&gt;keys&lt;/span&gt;(Image.resizeMode).&lt;span class=&quot;hljs-keyword&quot;&gt;join&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;  &apos;&lt;/span&gt;);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;打印出来的是 contain, cover, stretch 这几种模式， （官方文档不知道为什么不直接给出）&lt;/p&gt;
+&lt;h3 id=&quot;-mode&quot;&gt;尝试使用这些mode&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{styles.welcome}&lt;/span&gt;&amp;gt;&lt;/span&gt; 100px height &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Image&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{height:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;100&lt;/span&gt;}} &lt;span class=&quot;hljs-attr&quot;&gt;source&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{uri:&lt;/span&gt; &apos;&lt;span class=&quot;hljs-attr&quot;&gt;http:&lt;/span&gt;//&lt;span class=&quot;hljs-attr&quot;&gt;gtms03.alicdn.com&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;tps&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;i3&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;TB1Kcs5GXXXXXbMXVXXutsrNFXX-608-370.png&lt;/span&gt;&apos;}} /&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms02.alicdn.com/tps/i2/TB12zZNHpXXXXcsXpXXItPuSXXX-377-139.png&quot; alt=&quot;&quot;&gt; &lt;/p&gt;
+&lt;p&gt;100px 高度， 可以看到图片适应100高度和全屏宽度，背景居中适应未拉伸但是被截断也就是cover。  &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{styles.welcome}&lt;/span&gt;&amp;gt;&lt;/span&gt; 100px height with resizeMode contain &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[{flex:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;fe0000&lt;/span&gt;&apos;}]}&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Image&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{flex:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;100&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;resizeMode:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;Image.resizeMode.contain&lt;/span&gt;}} &lt;span class=&quot;hljs-attr&quot;&gt;source&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{uri:&lt;/span&gt; &apos;&lt;span class=&quot;hljs-attr&quot;&gt;http:&lt;/span&gt;//&lt;span class=&quot;hljs-attr&quot;&gt;gtms03.alicdn.com&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;tps&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;i3&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;TB1Kcs5GXXXXXbMXVXXutsrNFXX-608-370.png&lt;/span&gt;&apos;}} /&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms01.alicdn.com/tps/i1/TB1dxUMHpXXXXbHXFXXM0JSRFXX-376-141.png&quot; alt=&quot;&quot;&gt;
+contain 模式容器完全容纳图片，图片自适应宽高&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{styles.welcome}&lt;/span&gt;&amp;gt;&lt;/span&gt; 100px height with resizeMode cover &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[{flex:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;fe0000&lt;/span&gt;&apos;}]}&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Image&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{flex:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;100&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;resizeMode:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;Image.resizeMode.cover&lt;/span&gt;}} &lt;span class=&quot;hljs-attr&quot;&gt;source&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{uri:&lt;/span&gt; &apos;&lt;span class=&quot;hljs-attr&quot;&gt;http:&lt;/span&gt;//&lt;span class=&quot;hljs-attr&quot;&gt;gtms03.alicdn.com&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;tps&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;i3&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;TB1Kcs5GXXXXXbMXVXXutsrNFXX-608-370.png&lt;/span&gt;&apos;}} /&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms03.alicdn.com/tps/i3/TB1XIwNHpXXXXXnXFXX_XBSRFXX-376-140.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;cover模式同100px高度模式&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{styles.welcome}&lt;/span&gt;&amp;gt;&lt;/span&gt; 100px height with resizeMode stretch &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[{flex:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;fe0000&lt;/span&gt;&apos;}]}&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Image&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{flex:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;100&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;resizeMode:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;Image.resizeMode.stretch&lt;/span&gt;}} &lt;span class=&quot;hljs-attr&quot;&gt;source&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{uri:&lt;/span&gt; &apos;&lt;span class=&quot;hljs-attr&quot;&gt;http:&lt;/span&gt;//&lt;span class=&quot;hljs-attr&quot;&gt;gtms03.alicdn.com&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;tps&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;i3&lt;/span&gt;/&lt;span class=&quot;hljs-attr&quot;&gt;TB1Kcs5GXXXXXbMXVXXutsrNFXX-608-370.png&lt;/span&gt;&apos;}} /&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1f8eNHpXXXXb0aXXX0ijvSXXX-377-147.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;stretch模式图片被拉伸适应屏幕&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt;  &amp;lt;Text style={styles.welcome}&amp;gt; set height &lt;span class=&quot;hljs-keyword&quot;&gt;to&lt;/span&gt; image container &amp;lt;/Text&amp;gt;
+  &amp;lt;View style={[{flex: &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, backgroundColor: &lt;span class=&quot;hljs-string&quot;&gt;&apos;#fe0000&apos;&lt;/span&gt;, height: &lt;span class=&quot;hljs-number&quot;&gt;100&lt;/span&gt;}]}&amp;gt;
+      &amp;lt;Image style={{flex: &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;}} source={{uri: &lt;span class=&quot;hljs-string&quot;&gt;&apos;http://gtms03.alicdn.com/tps/i3/TB1Kcs5GXXXXXbMXVXXutsrNFXX-608-370.png&apos;&lt;/span&gt;}} /&amp;gt;
+  &amp;lt;/View&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms01.alicdn.com/tps/i1/TB1h0cQHpXXXXcrXXXX4OdTRFXX-376-146.png&quot; alt=&quot;&quot;&gt; &lt;/p&gt;
+&lt;p&gt;随便试验了一下， 发现高度设置到父容器，图片flex的时候也会等同于cover模式 &lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;绝对定位和相对定位&lt;/h2&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt; &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;100&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;#333333&apos;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+    &amp;lt;View style={[styles.circle, {&lt;span class=&quot;hljs-symbol&quot;&gt;position:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;absolute&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;top:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;50&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;left:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;180&lt;/span&gt;}]}&amp;gt;
+    &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+  &amp;lt;/&lt;/span&gt;View&amp;gt;
+  styles = {
+    &lt;span class=&quot;hljs-symbol&quot;&gt;circle:&lt;/span&gt; {
+    &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;#fe0000&apos;&lt;/span&gt;,
+    &lt;span class=&quot;hljs-symbol&quot;&gt;borderRadius:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;10&lt;/span&gt;,
+    &lt;span class=&quot;hljs-symbol&quot;&gt;width:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;20&lt;/span&gt;,
+    &lt;span class=&quot;hljs-symbol&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;20&lt;/span&gt;
+    }
+  }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms03.alicdn.com/tps/i3/TB1nosRHpXXXXX3XXXXgUklPVXX-376-98.png&quot; alt=&quot;&quot;&gt; &lt;/p&gt;
+&lt;p&gt;和css的标准不同的是， 元素容器不用设置&lt;code&gt;position：&amp;#39;absolute|relative&amp;#39;&lt;/code&gt; .  &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt; &amp;lt;View style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;flex:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;1&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;100&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;backgroundColor:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;#333333&apos;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+    &amp;lt;View style={[styles.circle, {&lt;span class=&quot;hljs-symbol&quot;&gt;position:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;relative&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;top:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;50&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;left:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;50&lt;/span&gt;, &lt;span class=&quot;hljs-symbol&quot;&gt;marginLeft:&lt;/span&gt; &lt;span class=&quot;hljs-number&quot;&gt;50&lt;/span&gt;}]}&amp;gt;
+    &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/View&amp;gt;
+  &amp;lt;/&lt;/span&gt;View&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1qi7PHpXXXXXGXpXXsNdBPVXX-374-96.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;相对定位的可以看到很容易的配合margin做到了。 （我还担心不能配合margin，所以测试了一下：-：） &lt;/p&gt;
+&lt;h2 id=&quot;padding-margin&quot;&gt;padding和margin&lt;/h2&gt;
+&lt;p&gt;我们知道在css中区分inline元素和block元素，既然react-native实现了一个超级小的css subset。那我们就来实验一下padding和margin在inline和非inline元素上的padding和margin的使用情况。  &lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;padding &lt;/strong&gt; &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-html&quot;&gt; &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[styles.text,&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;styles.header&lt;/span&gt;]}&amp;gt;&lt;/span&gt;
+    在正常的View上设置padding 
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{padding:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;30&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;333333&lt;/span&gt;&apos;}}&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[styles.text,&lt;/span&gt; {&lt;span class=&quot;hljs-attr&quot;&gt;color:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;fefefe&lt;/span&gt;&apos;}]}&amp;gt;&lt;/span&gt; Text Element&lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[styles.text,&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;styles.header&lt;/span&gt;]}&amp;gt;&lt;/span&gt;
+    在文本元素上设置padding
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{padding:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;0&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;333333&lt;/span&gt;&apos;}}&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[styles.text,&lt;/span&gt; {&lt;span class=&quot;hljs-attr&quot;&gt;backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;fe0000&lt;/span&gt;&apos;, &lt;span class=&quot;hljs-attr&quot;&gt;padding:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;30&lt;/span&gt;}]}&amp;gt;&lt;/span&gt;
+      text 元素上设置paddinga
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1F6APHpXXXXXKXFXXcAMvQVXX-375-265.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;在View上设置padding很顺利，没有任何问题， 但是如果在inline元素上设置padding， 发现会出现上面的错误， paddingTop和paddingBottom都被挤成marginBottom了。 按理说，不应该对Text做padding处理， 但是确实有这样的问题存在，所以可以将这个问题mark一下。 &lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;margin&lt;/strong&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-html&quot;&gt; &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[styles.text,&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;styles.header&lt;/span&gt;]}&amp;gt;&lt;/span&gt;
+    在正常的View上设置margin 
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;333333&lt;/span&gt;&apos;}}&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;fefefe&lt;/span&gt;&apos;, &lt;span class=&quot;hljs-attr&quot;&gt;width:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;30&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;height:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;30&lt;/span&gt;, &lt;span class=&quot;hljs-attr&quot;&gt;margin:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;30&lt;/span&gt;}}/&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[styles.text,&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;styles.header&lt;/span&gt;]}&amp;gt;&lt;/span&gt;
+    在文本元素上设置margin
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{{backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;333333&lt;/span&gt;&apos;}}&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[styles.text,&lt;/span&gt; {&lt;span class=&quot;hljs-attr&quot;&gt;backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;fe0000&lt;/span&gt;&apos;, &lt;span class=&quot;hljs-attr&quot;&gt;margin:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;30&lt;/span&gt;}]}&amp;gt;&lt;/span&gt;
+      text 元素上设置margin
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;span class=&quot;hljs-string&quot;&gt;{[styles.text,&lt;/span&gt; {&lt;span class=&quot;hljs-attr&quot;&gt;backgroundColor:&lt;/span&gt; &apos;#&lt;span class=&quot;hljs-attr&quot;&gt;fe0000&lt;/span&gt;&apos;, &lt;span class=&quot;hljs-attr&quot;&gt;margin:&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;30&lt;/span&gt;}]}&amp;gt;&lt;/span&gt;
+      text 元素上设置margin
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms03.alicdn.com/tps/i3/TB1yuYvHpXXXXXUaXXXlcAFQVXX-375-347.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;我们知道，对于inline元素，设置margin-left和margin-right有效，top和bottom按理是不会生效的， 但是上图的结果可以看到，实际是生效了的。所以现在给我的感觉是Text元素更应该理解为一个不能设置padding的block。 &lt;/p&gt;
+&lt;p&gt;算了不要猜了， 我们看看官方文档怎么说Text，&lt;a href=&quot;https://facebook.github.io/react-native/docs/text.html&quot;&gt;https://facebook.github.io/react-native/docs/text.html&lt;/a&gt; &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-html&quot;&gt;  &lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;Text&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;Text&amp;gt;&lt;/span&gt;First part and &lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;/Text&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;Text&amp;gt;&lt;/span&gt;second part&lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;/Text&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;/Text&amp;gt;&lt;/span&gt;
+  // Text container: all the text flows as if it was one
+  // |&lt;span class=&quot;hljs-string&quot;&gt;First part &lt;/span&gt;|
+  // |&lt;span class=&quot;hljs-string&quot;&gt;and second &lt;/span&gt;|
+  // |&lt;span class=&quot;hljs-string&quot;&gt;part       &lt;/span&gt;|
+
+  &lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;View&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;Text&amp;gt;&lt;/span&gt;First part and &lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;/Text&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;Text&amp;gt;&lt;/span&gt;second part&lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;/Text&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-variable&quot;&gt;&amp;lt;/View&amp;gt;&lt;/span&gt;
+  // View container: each text is its own block
+  // |&lt;span class=&quot;hljs-string&quot;&gt;First part &lt;/span&gt;|
+  // |&lt;span class=&quot;hljs-string&quot;&gt;and        &lt;/span&gt;|
+  // |&lt;span class=&quot;hljs-string&quot;&gt;second part&lt;/span&gt;|
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;也就是如果Text元素在Text里边，可以考虑为inline， 如果单独在View里边，那就是Block。 
+下面会专门研究一下文本相关的布局  &lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;文本元素&lt;/h2&gt;
+&lt;p&gt;首先我们得考虑对于Text元素我们希望有哪些功能或者想验证哪些功能：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;文字是否能自动换行？&lt;/li&gt;
+&lt;li&gt;overflow ellipse？&lt;/li&gt;
+&lt;li&gt;是否能对部分文字设置样式 ，类似span等标签&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h3 id=&quot;-style-&quot;&gt;先看看文字有哪些支持的style属性&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt; &lt;span class=&quot;hljs-comment&quot;&gt;/*==========TEXT================*/&lt;/span&gt;
+  Attributes.style = {
+    color &lt;span class=&quot;hljs-built_in&quot;&gt;string&lt;/span&gt;
+    containerBackgroundColor &lt;span class=&quot;hljs-built_in&quot;&gt;string&lt;/span&gt;
+    fontFamily &lt;span class=&quot;hljs-built_in&quot;&gt;string&lt;/span&gt;
+    fontSize &lt;span class=&quot;hljs-built_in&quot;&gt;number&lt;/span&gt;
+    fontStyle &lt;span class=&quot;hljs-keyword&quot;&gt;enum&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&apos;normal&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;italic&apos;&lt;/span&gt;)
+    fontWeight &lt;span class=&quot;hljs-keyword&quot;&gt;enum&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&quot;normal&quot;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;bold&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;100&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;200&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;300&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;400&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;500&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;600&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;700&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;800&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;900&apos;&lt;/span&gt;)
+    lineHeight &lt;span class=&quot;hljs-built_in&quot;&gt;number&lt;/span&gt;
+    textAlign &lt;span class=&quot;hljs-keyword&quot;&gt;enum&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&quot;auto&quot;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;left&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;right&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;center&apos;&lt;/span&gt;)
+    writingDirection &lt;span class=&quot;hljs-keyword&quot;&gt;enum&lt;/span&gt;(&lt;span class=&quot;hljs-string&quot;&gt;&quot;auto&quot;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;ltr&apos;&lt;/span&gt;, &lt;span class=&quot;hljs-string&quot;&gt;&apos;rtl&apos;&lt;/span&gt;)
+  }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h3 id=&quot;-1-2-3&quot;&gt;实验1， 2， 3&lt;/h3&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-html&quot;&gt; &amp;lt;Text style={[styles.&lt;span class=&quot;hljs-built_in&quot;&gt;text&lt;/span&gt;, styles.header]}&amp;gt;
+      文本元素
+  &amp;lt;/Text&amp;gt;
+
+  &amp;lt;View style={{backgroundColor: &apos;&lt;span class=&quot;hljs-comment&quot;&gt;#333333&apos;, padding: 10}}&amp;gt;&lt;/span&gt;
+    &amp;lt;Text style={styles.baseText} numberOfLines={&lt;span class=&quot;hljs-number&quot;&gt;5&lt;/span&gt;}&amp;gt;
+      &amp;lt;Text style={styles.titleText} onPress={this.onPressTitle}&amp;gt;
+        文本元素{&apos;\n&apos;}
+      &amp;lt;/Text&amp;gt;
+      &amp;lt;Text&amp;gt;
+        {&apos;\n&apos;}In this example, &lt;span class=&quot;hljs-keyword&quot;&gt;the&lt;/span&gt; nested title &lt;span class=&quot;hljs-keyword&quot;&gt;and&lt;/span&gt; body &lt;span class=&quot;hljs-built_in&quot;&gt;text&lt;/span&gt; will inherit &lt;span class=&quot;hljs-keyword&quot;&gt;the&lt;/span&gt; fontFamily &lt;span class=&quot;hljs-keyword&quot;&gt;from&lt;/span&gt; styles.baseText, &lt;span class=&quot;hljs-keyword&quot;&gt;but&lt;/span&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;the&lt;/span&gt; title provides &lt;span class=&quot;hljs-keyword&quot;&gt;its&lt;/span&gt; own additional styles. The title &lt;span class=&quot;hljs-keyword&quot;&gt;and&lt;/span&gt; body will stack &lt;span class=&quot;hljs-keyword&quot;&gt;on&lt;/span&gt; top &lt;span class=&quot;hljs-keyword&quot;&gt;of&lt;/span&gt; each other &lt;span class=&quot;hljs-keyword&quot;&gt;on&lt;/span&gt; account &lt;span class=&quot;hljs-keyword&quot;&gt;of&lt;/span&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;the&lt;/span&gt; literal newlines, numberOfLines &lt;span class=&quot;hljs-keyword&quot;&gt;is&lt;/span&gt; Used &lt;span class=&quot;hljs-keyword&quot;&gt;to&lt;/span&gt; truncate &lt;span class=&quot;hljs-keyword&quot;&gt;the&lt;/span&gt; &lt;span class=&quot;hljs-built_in&quot;&gt;text&lt;/span&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;with&lt;/span&gt; an elipsis &lt;span class=&quot;hljs-keyword&quot;&gt;after&lt;/span&gt; computing &lt;span class=&quot;hljs-keyword&quot;&gt;the&lt;/span&gt; &lt;span class=&quot;hljs-built_in&quot;&gt;text&lt;/span&gt; layout, including line wrapping, such &lt;span class=&quot;hljs-keyword&quot;&gt;that&lt;/span&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;the&lt;/span&gt; total &lt;span class=&quot;hljs-built_in&quot;&gt;number&lt;/span&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;of&lt;/span&gt; lines &lt;span class=&quot;hljs-keyword&quot;&gt;does&lt;/span&gt; &lt;span class=&quot;hljs-keyword&quot;&gt;not&lt;/span&gt; exceed this &lt;span class=&quot;hljs-built_in&quot;&gt;number&lt;/span&gt;.
+      &amp;lt;/Text&amp;gt;
+    &amp;lt;/Text&amp;gt;
+  &amp;lt;/View&amp;gt;
+  styles = {
+    baseText: {
+      fontFamily: &apos;Cochin&apos;,
+      color: &apos;white&apos;
+    },
+    titleText: {
+      fontSize: &lt;span class=&quot;hljs-number&quot;&gt;20&lt;/span&gt;,
+      fontWeight: &apos;bold&apos;,
+    }
+  }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms01.alicdn.com/tps/i1/TB19.EQHpXXXXceXpXXYxQoQVXX-375-225.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;从结果来看1，2，3得到验证。 但是不知道各位有没有发现问题， 为什么底部空出了这么多空间， 没有设置高度啊。 我去除&lt;code&gt;numberOfLines={5}&lt;/code&gt; 这行代码，效果如下：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1.BoRHpXXXXbdXpXXGJknQVXX-375-220.png&quot; alt=&quot;&quot;&gt; 
+所以实际上， 那段空间是文本撑开的， 但是文本被&lt;code&gt;numberOfLines={5}&lt;/code&gt; 截取了，但是剩余的空间还在。 我猜这应该是个bug。   &lt;/p&gt;
+&lt;p&gt;其实官方文档里边把&lt;code&gt;numberOfLines={5}&lt;/code&gt;这句放到的是长文本的Text元素上的，也就是子Text上的。 实际结果是不生效。  这应该又是一个bug。 &lt;/p&gt;
+&lt;p&gt;Text元素的子Text元素的具体实现是怎样的， 感觉这货会有很多bug， 看官文 &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-html&quot;&gt; &amp;lt;Text style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;fontWeight:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;bold&apos;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+  I am bold
+  &amp;lt;Text style=&lt;span class=&quot;hljs-template-variable&quot;&gt;{{&lt;span class=&quot;hljs-symbol&quot;&gt;color:&lt;/span&gt; &lt;span class=&quot;hljs-string&quot;&gt;&apos;red&apos;&lt;/span&gt;}}&lt;/span&gt;&amp;gt;
+    and red
+  &amp;lt;&lt;span class=&quot;hljs-regexp&quot;&gt;/Text&amp;gt;
+ &amp;lt;/&lt;/span&gt;Text&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Behind the scenes, this is going to be converted to a flat 
+NSAttributedString that contains the following information &lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-javascript&quot;&gt; &lt;span class=&quot;hljs-string&quot;&gt;&quot;I am bold and red&quot;&lt;/span&gt;
+  &lt;span class=&quot;hljs-number&quot;&gt;0&lt;/span&gt;-&lt;span class=&quot;hljs-number&quot;&gt;9&lt;/span&gt;: &lt;span class=&quot;hljs-keyword&quot;&gt;bold
+&lt;/span&gt;  &lt;span class=&quot;hljs-number&quot;&gt;9&lt;/span&gt;-&lt;span class=&quot;hljs-number&quot;&gt;17&lt;/span&gt;: &lt;span class=&quot;hljs-keyword&quot;&gt;bold, &lt;/span&gt;red
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;好吧， 那对于&lt;code&gt;numberOfLines={5}&lt;/code&gt;  放在子Text元素上的那种bug倒是可以解释了。 &lt;/p&gt;
+&lt;h3 id=&quot;text-&quot;&gt;Text的样式继承&lt;/h3&gt;
+&lt;p&gt;实际上React-native里边是没有样式继承这种说法的， 但是对于Text元素里边的Text元素，上面的例子可以看出存在继承。 那既然有继承，问题就来了！&lt;/p&gt;
+&lt;p&gt;到底是继承的最外层的Text的值呢，还是继承父亲Text的值呢？&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-html&quot;&gt;&lt;span class=&quot;xml&quot;&gt; &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{[styles.text, styles.header]}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+      文本样式继承
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{{backgroundColor: &apos;#333333&apos;, padding: 10}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;}&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{{color: &apos;white&apos;}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;}&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt; &lt;span class=&quot;hljs-attr&quot;&gt;style&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{{color: &apos;red&apos;}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;} &lt;span class=&quot;hljs-attr&quot;&gt;onPress&lt;/span&gt;=&lt;/span&gt;&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{this.onPressTitle}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;&lt;span class=&quot;hljs-tag&quot;&gt;&amp;gt;&lt;/span&gt;
+         文本元素&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{&apos;\n&apos;}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt;
+        &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;我是white还是red呢？&lt;/span&gt;&lt;span class=&quot;hljs-template-variable&quot;&gt;{&apos;\n&apos;}&lt;/span&gt;&lt;span class=&quot;xml&quot;&gt; &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;我应该是white的&lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;Text&lt;/span&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;hljs-tag&quot;&gt;&amp;lt;/&lt;span class=&quot;hljs-name&quot;&gt;View&lt;/span&gt;&amp;gt;&lt;/span&gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1z2ERHpXXXXcrXpXXXsoYPFXX-373-120.png&quot; alt=&quot;&quot;&gt;&lt;/p&gt;
+&lt;p&gt;结果可见是直接继承父亲Text的。  &lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;总结&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;react 宽度基于&lt;code&gt;pt&lt;/code&gt;为单位， 可以通过&lt;code&gt;Dimensions&lt;/code&gt; 来获取宽高，&lt;code&gt;PixelRatio&lt;/code&gt; 获取密度，如果想使用百分比，可以通过获取屏幕宽度手动计算。 &lt;/li&gt;
+&lt;li&gt;基于flex的布局 &lt;ol&gt;
+&lt;li&gt;view默认宽度为100%&lt;/li&gt;
+&lt;li&gt;水平居中用&lt;code&gt;alignItems&lt;/code&gt;, 垂直居中用&lt;code&gt;justifyContent&lt;/code&gt; &lt;/li&gt;
+&lt;li&gt;基于flex能够实现现有的网格系统需求，且网格能够各种嵌套无bug&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/li&gt;
+&lt;li&gt;图片布局&lt;ol&gt;
+&lt;li&gt;通过&lt;code&gt;Image.resizeMode&lt;/code&gt;来适配图片布局，包括&lt;code&gt;contain&lt;/code&gt;, &lt;code&gt;cover&lt;/code&gt;, &lt;code&gt;stretch&lt;/code&gt; &lt;/li&gt;
+&lt;li&gt;默认不设置模式等于cover模式&lt;/li&gt;
+&lt;li&gt;contain模式自适应宽高，给出高度值即可&lt;/li&gt;
+&lt;li&gt;cover铺满容器，但是会做截取 &lt;/li&gt;
+&lt;li&gt;stretch铺满容器，拉伸 &lt;/li&gt;
+&lt;/ol&gt;
+&lt;/li&gt;
+&lt;li&gt;定位&lt;ol&gt;
+&lt;li&gt;定位相对于父元素，父元素不用设置position也行&lt;/li&gt;
+&lt;li&gt;padding 设置在Text元素上的时候会存在bug。所有padding变成了marginBottom&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/li&gt;
+&lt;li&gt;文本元素&lt;ol&gt;
+&lt;li&gt;文字必须放在Text元素里边&lt;/li&gt;
+&lt;li&gt;Text元素可以相互嵌套，且存在样式继承关系&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;numberOfLines&lt;/code&gt; 需要放在最外层的Text元素上，且虽然截取了文字但是还是会占用空间&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+]]&gt;</description></item><item><title><![CDATA[React Native概述：背景、规划和风险]]></title><link>http://acyort.github.io/posts/2015/04/66459127.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/04/66459127.html</guid><dc:creator><![CDATA[luics]]></dc:creator><pubDate>Sun, 03 Jan 2016 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;&lt;a href=&quot;http://facebook.github.io/react/blog/2015/03/26/introducing-react-native.html&quot;&gt;Facebook在3.26 F8大会上开源了React Native&lt;/a&gt;，本文是对React Native的技术背景、规划和风险的概述。看得比较仓促，问题处请直接回复。&lt;/p&gt;
+&lt;p&gt;组里的同学于4.2完成了天猫iPad客户端“猜你喜欢”业务的React Native改造（4月中发版）。&lt;strong&gt;本周开始陆续放出性能/体验、稳定性、扩展性、开发效率等评估结果&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB1dX3wHpXXXXaXXpXX5ef1RVXX-618-468.png&quot; alt=&quot;&quot;&gt;
+图1 - 4.2已完成React Native改造的业务&lt;/p&gt;
+&lt;h2 id=&quot;-&quot;&gt;背景&lt;/h2&gt;
+&lt;h3 id=&quot;-react-native&quot;&gt;为什么需要 React Native&lt;/h3&gt;
+&lt;blockquote&gt;
+&lt;p&gt;What we really want is the &lt;strong&gt;&lt;em&gt;user experience&lt;/em&gt;&lt;/strong&gt; of the &lt;strong&gt;&lt;em&gt;native mobile&lt;/em&gt;&lt;/strong&gt; platforms, combined with the &lt;strong&gt;&lt;em&gt;developer experience&lt;/em&gt;&lt;/strong&gt; we have when building with &lt;strong&gt;&lt;em&gt;React&lt;/em&gt;&lt;/strong&gt; on the web.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;摘自&lt;a href=&quot;http://facebook.github.io/react/blog/2015/03/26/introducing-react-native.html&quot;&gt;3.26 React Native的发布稿&lt;/a&gt;，加粗的关键字传达了React Native的设计理念：&lt;strong&gt;&lt;em&gt;既拥有Native的用户体验、又保留&lt;a href=&quot;http://facebook.github.io/react/index.html&quot;&gt;React&lt;/a&gt;的开发效率&lt;/em&gt;&lt;/strong&gt;。这个理念似乎迎合了业界普片存在的痛点，开源不到1周github star破万，目前是11000+。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms04.alicdn.com/tps/i4/TB14vkBHpXXXXc5XpXX7_PDOpXX-1260-102.png&quot; alt=&quot;&quot;&gt;
+图1 - &lt;a href=&quot;https://github.com/facebook/react-native/&quot;&gt;React Native github&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;React Native项目成员Tom Occhino发表的&lt;a href=&quot;http://facebook.github.io/react/blog/2015/03/26/introducing-react-native.html&quot;&gt;React Native: Bringing modern web techniques to mobile&lt;/a&gt;（墙外）详细描述了React Native的设计理念。Occhino认为尽管Native开发成本更高，但现阶段Native仍然是必须的，因为Web的用户体验仍无法超越Native：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Native的原生控件有更好的体验；&lt;/li&gt;
+&lt;li&gt;Native有更好的手势识别；&lt;/li&gt;
+&lt;li&gt;Native有更合适的线程模型，尽管Web Worker可以解决一部分问题，但如图像解码、文本渲染仍无法多线程渲染，这影响了Web的流畅性。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Occhino没提到的还有Native能实现更丰富细腻的动画效果，归根结底是现阶段Native具有更好的人机交互体验。&lt;strong&gt;笔者认为这些例子是有说服力的，也是React Native出现的直接原因&lt;/strong&gt;。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms01.alicdn.com/tps/i1/TB1JE3DHpXXXXaVXXXX4nb1JpXX-1164-1062.png&quot; alt=&quot;&quot;&gt;
+图2 - Occhino在F8分享了React Native（Keynote）&lt;/p&gt;
+&lt;h3 id=&quot;-learn-once-write-anywhere-&quot;&gt;“Learn once, write anywhere”&lt;/h3&gt;
+&lt;p&gt;“&lt;em&gt;Learn once, write anywhere&lt;/em&gt;”同样出自Occhino的&lt;a href=&quot;https://code.facebook.com/posts/1014532261909640/react-native-bringing-modern-web-techniques-to-mobile/&quot;&gt;文章&lt;/a&gt;。因为不同Native平台上的用户体验是不同的，React Native不强求一份原生代码支持多个平台，所以不提“Write once, run anywhere”（Java），提出了“Learn once, write anywhere”。&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms01.alicdn.com/tps/i1/TB1MOEBHpXXXXcWXpXXjG9vFFXX-1132-642.png&quot; alt=&quot;&quot;&gt;
+图3 - “Learn once, write anywhere”&lt;/p&gt;
+&lt;p&gt;这张图是笔者根据理解画的一张示意图，自下而上依次是：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;React&lt;/strong&gt;：不同平台上编写基于React的代码，“Learn once, write anywhere”。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Virtual DOM&lt;/strong&gt;：相对Browser环境下的DOM（文档对象模型）而言，Virtual DOM是DOM在内存中的一种轻量级表达方式（原话是&lt;a href=&quot;https://code.facebook.com/posts/1014532261909640/react-native-bringing-modern-web-techniques-to-mobile/&quot;&gt;lightweight representation of the document&lt;/a&gt;），可以通过不同的渲染引擎生成不同平台下的UI，&lt;a href=&quot;http://blog.cnbang.net/tech/2698/?from=groupmessage&amp;amp;isappinstalled=1&quot;&gt;JS和Native之间通过Bridge通信&lt;/a&gt;。&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Web/iOS/Android&lt;/strong&gt;：已实现了Web和iOS平台，&lt;a href=&quot;http://facebook.github.io/react/blog/#when-is-react-native-android-coming&quot;&gt;Android平台预计将于2015年10月实现&lt;/a&gt;。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;前文多处提到的React是Facebook 2013年开源的Web开发框架，笔者在翻阅其&lt;a href=&quot;http://facebook.github.io/react/blog/2013/06/05/why-react.html&quot;&gt;2013年发布稿&lt;/a&gt;时，发现这么一段：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms02.alicdn.com/tps/i2/TB1fJACHpXXXXbcXpXXjeeZTVXX-1302-452.png&quot; alt=&quot;&quot;&gt;
+图4 - 摘自React发布稿（2013）&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;加亮文字显示2013年已经在开发React Native的原型，现在也算是厚积薄发了。&lt;/li&gt;
+&lt;li&gt;最近另一个比较火的项目是&lt;a href=&quot;https://github.com/Flipboard/react-canvas&quot;&gt;Flipboard React Canvas&lt;/a&gt;(详见 @rank)，渲染层使用了Web Canvas来提升交互流畅性，这和上图第一个尝试类似。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;React本身也是个庞大的话题不再展开，详见&lt;a href=&quot;https://github.com/facebook/react/wiki/Complementary-Tools&quot;&gt;React wiki&lt;/a&gt;。&lt;/p&gt;
+&lt;p&gt;笔者认为“Write once, run anywhere”对提升效率仍然是必要的，并且和“Learn once, write anywhere”也没有冲突，我们内部正在改造已有的组件库和HybridAPI，让其适配（补齐）React Native的组件，从而写一份代码可以运行在iOS和Web上，待成熟后开源出来。&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;持续更新&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2 id=&quot;-&quot;&gt;规划&lt;/h2&gt;
+&lt;p&gt;下图展示了业务和技术为React Native所做的改造：&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;http://gtms03.alicdn.com/tps/i3/TB1WRUDHpXXXXa4XXXXa34RTVXX-1406-948.png&quot; alt=&quot;&quot;&gt;
+图5 - 业务和技术改造&lt;/p&gt;
+&lt;p&gt;自下而上：&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;React Node：React支持服务端渲染，通常用于首屏服务端渲染；典型场景是多页列表，首屏服务端渲染翻页客户端渲染，避免首次请求页面时发起2次http请求。&lt;/li&gt;
+&lt;li&gt;React Native基础环境：&lt;ol&gt;
+&lt;li&gt;Framework集成：尽管React Native放出了&lt;a href=&quot;http://facebook.github.io/react-native/docs/embedded-app.html#content&quot;&gt;&lt;em&gt;Integration with Existing App&lt;/em&gt;&lt;/a&gt;文档，集成到现有复杂App中仍然会遇到很多细节问题，比如集成到天猫iPad客户端就花了组里iOS同学2天的时间。&lt;/li&gt;
+&lt;li&gt;Networking改造：主要是重新建立session，而session通常存放于http header cookie中，React Native提供的网络IO &lt;a href=&quot;https://fetch.spec.whatwg.org/#forbidden-header-name&quot;&gt;fetch&lt;/a&gt;和XMLHttpRequest不支持改写cookie。所以要不在保证安全的条件下实现fetch的扩展，要么由native负责网络IO（已有session机制）再通过HybridAPI由JS调用，暂时选择了后者。&lt;/li&gt;
+&lt;li&gt;缓存/打包方案：只要有资源从服务器端加载就避免不了这个话题，React Native也是如此，缓存用于解决资源二次访问时的加载性能，打包解决的是资源首次访问时的加载性能。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/li&gt;
+&lt;li&gt;MUI是一套组件库，目前会采用向React Native组件补齐的思路进行改造。&lt;/li&gt;
+&lt;li&gt;HybridAPI是阿里一组Hybrid API，此前也在多个&lt;a href=&quot;http://luics.com/demo/hybrid-api/hangjs/#/&quot;&gt;公开场合&lt;/a&gt;分享过不再累述，&lt;a href=&quot;http://blog.cnbang.net/tech/2698/?from=groupmessage&amp;amp;isappinstalled=1&quot;&gt;React Native建立了自己的通信机制&lt;/a&gt;（@bang），看起来更高效（未验证），改造成本不大。&lt;/li&gt;
+&lt;li&gt;最快的一个业务将于4月中上线，通过最初几个业务改造推动整体系统的改造，如果效果如预期则会启动更大规模的业务改造。&lt;/li&gt;
+&lt;/ol&gt;
+&lt;blockquote&gt;
+&lt;p&gt;更多详细规划和进展，以及性能、稳定性、扩展性的数据随后放出。 &lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h2 id=&quot;-&quot;&gt;风险&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;尽管Facebook有3款App(Groups、Ads Manager、F8)使用了React Native，随着React Native大规模应用，Appstore的政策是否有变不得而知，我们只能往前走一步。&lt;/li&gt;
+&lt;li&gt;React Native Android 预计2015年10月才发布，这对希望三端（Web/iOS/Android）架构一致的用户而言也算个风险。&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://stackoverflow.com/questions/23514579/javascriptcore-framework-availability-on-ios&quot;&gt;iOS6 JavascriptCore为私有API&lt;/a&gt;，如在iOS6上使用有拒审风险。&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/facebook/react-native/issues/499&quot;&gt;ListView 性能问题需要持续关注&lt;/a&gt;（react-native github issue）&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;React Native相对于Webview和Native的优势和劣势 @berg 也给出了较详细的描述，可以相互参照。&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;持续更新...&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;鬼道&lt;br&gt;2015.4.6&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[five-lines (深入浅出 node 命令行工具)]]></title><link>http://acyort.github.io/posts/2015/03/62672525.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/03/62672525.html</guid><dc:creator><![CDATA[luics]]></dc:creator><pubDate>Tue, 17 Mar 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;&lt;a href=&quot;http://2014.jsconf.cn/slides/five-lines.pdf&quot;&gt;five-lines (深入浅出 node 命令行工具)&lt;/a&gt; @不四 &amp;lt;sub&amp;gt;2014.06 @&lt;a href=&quot;http://2014.jsconf.cn/&quot;&gt;2014 杭JS&lt;/a&gt;&amp;lt;/sub&amp;gt;&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[移动优先的跨终端Web]]></title><link>http://acyort.github.io/posts/2015/03/62672389.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/03/62672389.html</guid><dc:creator><![CDATA[luics]]></dc:creator><pubDate>Tue, 17 Mar 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;&lt;a href=&quot;http://luics.github.io/demo/cew-w3ctech-1311/&quot;&gt;移动优先的跨终端 Web&lt;/a&gt; @[鬼道][luics] &amp;lt;sub&amp;gt;2013.07.14 &lt;a href=&quot;http://adc.alibabatech.org/carnival/schedule#14th#ued1&quot;&gt;ADC D2 2013&lt;/a&gt;，2013.11.23 @&lt;a href=&quot;http://www.w3ctech.com/event/32&quot;&gt;W3CTECH 2013&lt;/a&gt; &amp;lt;/sub&amp;gt; &lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[残酷 KPI 下的极致优化——淘宝天猫首页优化实践]]></title><link>http://acyort.github.io/posts/2015/03/62672329.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/03/62672329.html</guid><dc:creator><![CDATA[luics]]></dc:creator><pubDate>Tue, 17 Mar 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt; &lt;a href=&quot;http://velocity.oreilly.com.cn/2013/ppts/ultimate_optimization-best_practices_of_taobao_homepage.pdf&quot;&gt;残酷 KPI 下的极致优化——淘宝天猫首页优化实践&lt;/a&gt; @步天 &amp;lt;sub&amp;gt;2013.08.21 @&lt;a href=&quot;http://velocity.oreilly.com.cn/2013/&quot;&gt;Velocity China 2013&lt;/a&gt;&amp;lt;/sub&amp;gt;&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[跨终端的 Web]]></title><link>http://acyort.github.io/posts/2015/03/62672269.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/03/62672269.html</guid><dc:creator><![CDATA[luics]]></dc:creator><pubDate>Tue, 17 Mar 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;&lt;a href=&quot;http://tmallfe.github.io/slide/cross-end-web-Qcon2013.key&quot;&gt;跨终端的 Web&lt;/a&gt; @舒文 &amp;lt;sub&amp;gt;2013.04.12 @&lt;a href=&quot;http://www.qconchengdu.com/track04.html&quot;&gt;QCon成都2013大会&lt;/a&gt;&amp;lt;/sub&amp;gt;   &lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[跨终端的前端工程师]]></title><link>http://acyort.github.io/posts/2015/03/62659049.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/03/62659049.html</guid><dc:creator><![CDATA[luics]]></dc:creator><pubDate>Tue, 17 Mar 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;详见 &lt;a href=&quot;http://tmallfe.github.io/slide/cross-end-fe.pdf&quot;&gt;跨终端的前端工程师&lt;/a&gt; @三七 &amp;lt;sub&amp;gt;2014.03.20 @电⼦子科技⼤大学，2014.03.21 @四川⼤大学&amp;lt;/sub&amp;gt;&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[从实验出发的移动端性能优化]]></title><link>http://acyort.github.io/posts/2015/03/62658547.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/03/62658547.html</guid><dc:creator><![CDATA[luics]]></dc:creator><pubDate>Tue, 17 Mar 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;p&gt;详见 &lt;a href=&quot;http://tmallfe.github.io/slide/performance@velocity.pdf&quot;&gt;从实验出发的移动端性能优化&lt;/a&gt; @由校 &amp;lt;sub&amp;gt;2014.08.12 @&lt;a href=&quot;http://velocity.oreilly.com.cn/2014/index.php?func=session&amp;amp;id=51&quot;&gt;Velocity&lt;/a&gt;&amp;lt;/sub&amp;gt;&lt;/p&gt;
+]]&gt;</description></item><item><title><![CDATA[Native和Web融合]]></title><link>http://acyort.github.io/posts/2015/03/62658230.html</link><guid isPermaLink="true">http://acyort.github.io/posts/2015/03/62658230.html</guid><dc:creator><![CDATA[luics]]></dc:creator><pubDate>Tue, 17 Mar 2015 16:00:00 GMT</pubDate><description>&lt;![CDATA[&lt;blockquote&gt;
+&lt;p&gt;详见 &lt;a href=&quot;http://www.qconbeijing.com/speakers/201702&quot;&gt;Native和Web融合&lt;/a&gt; @鬼道 &amp;lt;sub&amp;gt;2015.04 @&lt;a href=&quot;http://www.qconbeijing.com/track/2517&quot;&gt;QCon北京2015&lt;/a&gt;&amp;lt;/sub&amp;gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;“Native 和 Web 融合”已经在阿里生根发芽。以前提得较多的是 Hybrid，Hybrid 是融合的一面，更多是指 Web 融合 Native 能力，更窄一点指的就是 Hybrid API（类 Phonegap）；另一面是 Native 融合 Web 的能力，尤其是 Web 的发布能力和大规模协作的能力。作者尝试理清 Native 和 Web 的亮点和痛点，借鉴对方亮点解决自身的痛点，并给出淘系 App 在这些方面的实践。 &lt;/p&gt;
+&lt;p&gt;Native 诸多亮点中，流畅体验和系统调用是最多被提及的。Native 的流畅体验体现在页面滚动和动画的流畅性，背后是更好的内存管理和更接近原生的性能；Web 痛点集中在资源首次下载、长页面内存溢出和滚动性能。Native 有丰富的系统 API 可供调用灵活度较高，Web 痛点在于 W3C 标准太慢，有限的设备访问能力，API 兼容性问题较严重。&lt;/p&gt;
+&lt;p&gt;Web 最大的亮点是发布能力，合适的缓存机制下一天更新率可超过 99%，iOS 能达到一周更新率 60%-80%，Android 同样的更新率要一个月甚至更长。iOS Hotpatch 可用于修复紧急问题，受限商店政策难以走得更远，Android 自由度会更大。Mobile Web 的协作能力底层来自 Webkit，上层有 html/js/css 控制页面的结构/行为/样式 URI 连接不同的资源，这样的机制可以被 Native 借鉴，构建 Native 的分层架构。&lt;/p&gt;
+]]&gt;</description></item></channel></rss>
